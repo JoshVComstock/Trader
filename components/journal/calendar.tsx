@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 import type { CalendarWeek } from "@/lib/calc/metrics";
 import { compactMoney, signedMoney } from "@/lib/format";
 import { useJournal } from "./journal-context";

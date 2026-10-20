@@ -1,19 +1,11 @@
 "use client";
 
-import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon, FlaskConicalIcon, LogOutIcon, MenuIcon, MoonIcon, NotebookPenIcon, PlusIcon, SettingsIcon, SunIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useTheme } from "next-themes";
-import { signOut } from "@/app/actions/auth";
+import { AppMenu } from "@/components/app/app-menu";
 import { Logo } from "@/components/app/logo";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ACCOUNT_KIND_LABEL, type JournalMode } from "@/lib/domain/types";
 import type { Account } from "@/lib/data";
@@ -61,14 +53,14 @@ export function TopBar({
 
         {accounts.length > 0 && accountId && (
           <Select value={accountId} onValueChange={(v) => go({ cuenta: v })}>
-            <SelectTrigger size="sm" className="h-8 max-w-44 min-w-0" aria-label="Cuenta">
+            <SelectTrigger size="sm" className="h-8 max-w-52 min-w-0" aria-label="Cuenta">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {accounts.map((a) => (
                 <SelectItem key={a.id} value={a.id}>
                   {a.label}
-                  <span className="text-xs text-muted-foreground">{ACCOUNT_KIND_LABEL[a.kind]}</span>
+                  {a.kind === "demo" && ` · ${ACCOUNT_KIND_LABEL.demo}`}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -128,60 +120,5 @@ export function RegisterFab() {
       <PlusIcon className="size-5" />
       Registrar
     </Button>
-  );
-}
-
-export function AppMenu({ mode, accountId }: { mode?: JournalMode; accountId?: string | null }) {
-  const { resolvedTheme, setTheme } = useTheme();
-  const dark = resolvedTheme !== "light";
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="Menú">
-          <MenuIcon />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
-        {accountId && (
-          <DropdownMenuItem asChild>
-            <a href={`/api/export?cuenta=${accountId}`} download>
-              <DownloadIcon />
-              Exportar CSV
-            </a>
-          </DropdownMenuItem>
-        )}
-        {mode !== "live" && (
-          <DropdownMenuItem asChild>
-            <Link href="/journal">
-              <NotebookPenIcon />
-              Bitácora (real y demo)
-            </Link>
-          </DropdownMenuItem>
-        )}
-        {mode !== "backtest" && (
-          <DropdownMenuItem asChild>
-            <Link href="/backtesting">
-              <FlaskConicalIcon />
-              Backtesting
-            </Link>
-          </DropdownMenuItem>
-        )}
-        <DropdownMenuItem asChild>
-          <Link href="/ajustes">
-            <SettingsIcon />
-            Ajustes
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => setTheme(dark ? "light" : "dark")}>
-          {dark ? <SunIcon /> : <MoonIcon />}
-          {dark ? "Tema claro" : "Tema oscuro"}
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => void signOut()}>
-          <LogOutIcon />
-          Salir
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }

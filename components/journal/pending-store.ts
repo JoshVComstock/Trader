@@ -34,7 +34,9 @@ function load(): PendingTrade[] {
 
 function persist(list: PendingTrade[]) {
   try {
-    const keep = list.filter((p) => p.status !== "saved").map(({ file: _file, ...rest }) => rest);
+    const keep = list
+      .filter((p) => p.status !== "saved")
+      .map((p) => ({ payload: p.payload, status: p.status, error: p.error, createdAt: p.createdAt }));
     if (keep.length) window.localStorage.setItem(KEY, JSON.stringify(keep));
     else window.localStorage.removeItem(KEY);
   } catch {

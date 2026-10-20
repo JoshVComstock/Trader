@@ -215,7 +215,8 @@ async function seedAccount(opts: {
     await db
       .from("sessions")
       .update({
-        status: blockReason ? "blocked" : "closed",
+        // En backtesting los días quedan abiertos para seguir cargando operaciones.
+        status: blockReason ? "blocked" : opts.kind === "backtest" ? "open" : "closed",
         blocked_reason: blockReason,
         closed_at: new Date(cursor + 2 * 60_000).toISOString(),
         followed_plan: opts.kind === "real" ? followed : null,

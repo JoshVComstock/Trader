@@ -1,36 +1,116 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Racha
 
-## Getting Started
+Bitácora de trading para índices sintéticos de Deriv — **Boom y Crash**. Registras cada operación a mano en
+menos de diez segundos desde el celular, y la app mide tu disciplina además del resultado: reglas que avisan o
+bloquean la sesión de verdad, checklist de once puntos, a favor o en contra del spike, curva de capital,
+calendario y desgloses.
 
-First, run the development server:
+Tiene dos secciones con la misma mecánica:
+
+- **Bitácora** (`/journal`) — cuentas reales y demo.
+- **Backtesting** (`/backtesting`) — cuentas de práctica sobre datos históricos, sin dinero real. Indicas la
+  fecha y hora de cada operación; cada día se vuelve una sesión con las mismas reglas y métricas.
+
+Las capturas de pantalla se suben a **Cloudinary** como archivos privados.
+
+## Stack
+
+Next.js 16 (App Router) · React 19 · TypeScript estricto · Tailwind CSS v4 · shadcn/ui · Supabase (Postgres,
+Auth, RLS) · Cloudinary · React Hook Form + Zod · Recharts · date-fns · Vitest · pnpm · Vercel.
+
+## Levantarlo en local
+
+Requisitos: Node 20+, pnpm y Docker (para Supabase local).
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
+cp .env.example .env.local
+pnpm exec supabase start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`supabase start` aplica las migraciones de `supabase/migrations` y muestra las claves. Copia en `.env.local`:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `API_URL` → `NEXT_PUBLIC_SUPABASE_URL`
+- `PUBLISHABLE_KEY` → `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `SECRET_KEY` → `SUPABASE_SECRET_KEY`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+(Si las pierdes: `pnpm exec supabase status`.)
 
-## Learn More
+Carga los datos de ejemplo y arranca:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+pnpm seed
+pnpm dev
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Entra en http://localhost:3000 con `SEED_EMAIL` / `SEED_PASSWORD` de tu `.env.local`. El seed crea una cuenta
+real con 30 sesiones y ~70 operaciones en dos meses, y una cuenta de backtesting. Se puede repetir: borra y
+recrea solo las cuentas de ejemplo.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Para sembrar en un usuario que ya existe: `pnpm seed -- --email tu@email.com`.
 
-## Deploy on Vercel
+## Supabase en la nube
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. Crea un proyecto en https://supabase.com.
+2. Vincula y sube las migraciones:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+   ```bash
+   pnpm exec supabase login
+   pnpm exec supabase link --project-ref TU_PROJECT_REF
+   pnpm exec supabase db push
+   ```
+
+3. En **Authentication → URL Configuration**, pon tu dominio de Vercel como *Site URL* y añade
+   `https://TU_DOMINIO/auth/confirm` a las *Redirect URLs*.
+4. Opcional: `pnpm seed` con las variables apuntando al proyecto remoto para tener datos de ejemplo.
+
+## Cloudinary
+
+1. Crea una cuenta gratuita en https://cloudinary.com.
+2. En **Settings → API Keys** copia *Cloud name*, *API key* y *API secret* a `CLOUDINARY_CLOUD_NAME`,
+   `CLOUDINARY_API_KEY` y `CLOUDINARY_API_SECRET`.
+
+Cómo funciona: el navegador comprime la captura a WebP (máx. 1600 px), el servidor firma una subida atada a
+`racha/{user_id}/{trade_id}/{uuid}` y el archivo se guarda como `type: private`. Para verla, el servidor genera
+una URL firmada que caduca en una hora, y solo la genera para capturas que la RLS de `attachments` le deja leer
+a ese usuario. Otro usuario no puede ni listar ni abrir tus capturas.
+
+## Deploy en Vercel
+
+1. Importa el repo en https://vercel.com/new (framework: Next.js, se detecta solo).
+2. Variables de entorno: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`,
+   `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`. `SUPABASE_SECRET_KEY` no hace falta
+   en Vercel: solo la usa el seed.
+3. Deploy.
+
+## Instalar como app (PWA)
+
+Abre la URL en el celular → menú del navegador → *Añadir a pantalla de inicio* (Chrome) o *Compartir → Añadir
+a inicio* (Safari). Abre directo en `/journal`.
+
+## Scripts
+
+| Comando | Qué hace |
+|---|---|
+| `pnpm dev` | Servidor de desarrollo |
+| `pnpm build` | Build de producción (incluye chequeo de tipos) |
+| `pnpm lint` | ESLint |
+| `pnpm test` | Tests del motor de reglas y de los cálculos (Vitest) |
+| `pnpm typecheck` | `tsc --noEmit` |
+| `pnpm seed` | Datos de ejemplo |
+
+## Estructura
+
+```
+app/                  rutas (journal, backtesting, detalle, ajustes, login) y Server Actions
+components/journal/   los siete bloques del journal y el formulario de registro
+components/trade/     detalle de operación: nota, capturas, editar/borrar
+components/settings/  cuentas, reglas, estrategias
+lib/rules/            motor de reglas puro (sin dependencias) + tests
+lib/calc/             R, resultado, a favor del spike, métricas + tests
+lib/data.ts           lecturas del servidor
+supabase/migrations/  esquema, RLS, triggers de bloqueo y de métricas
+scripts/seed.ts       datos de ejemplo
+```
+
+Decisiones y pendientes: [ROADMAP.md](ROADMAP.md).

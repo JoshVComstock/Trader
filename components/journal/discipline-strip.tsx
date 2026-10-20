@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 import { LockIcon } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";

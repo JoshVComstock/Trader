@@ -44,6 +44,7 @@ export function EquityChart({ points, currency }: { points: EquityPoint[]; curre
   }
 
   const minDd = Math.min(...points.map((p) => p.drawdown));
+  const ddFloor = minDd < 0 ? minDd : -1;
   const values = points.map((p) => p.equity);
   const lo = Math.min(...values);
   const hi = Math.max(...values);
@@ -108,13 +109,13 @@ export function EquityChart({ points, currency }: { points: EquityPoint[]; curre
               minTickGap={24}
             />
             <YAxis
-              domain={[Math.min(minDd * 1.15, -1), 0]}
+              domain={[ddFloor, 0]}
+              ticks={[ddFloor, 0]}
               tick={axisTick}
               tickLine={false}
               axisLine={false}
               width={56}
-              tickCount={3}
-              tickFormatter={(v: number) => money(v, currency, 0)}
+              tickFormatter={(v: number) => money(v, currency, Math.abs(v) < 10 && v !== 0 ? 2 : 0)}
             />
             <Tooltip
               cursor={{ stroke: "var(--border)" }}

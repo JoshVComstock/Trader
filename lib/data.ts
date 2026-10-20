@@ -205,7 +205,8 @@ export async function getJournalData(args: {
 }): Promise<JournalData> {
   const { supabase } = await requireUser();
   const today = todayLocal();
-  const month = args.month && /^\d{4}-\d{2}$/.test(args.month) ? args.month : today.slice(0, 7);
+  const requestedMonth = args.month && /^\d{4}-\d{2}$/.test(args.month) ? args.month : null;
+  let month = requestedMonth ?? today.slice(0, 7);
 
   const [accounts, strategies, rules] = await Promise.all([
     listAccounts(supabase, kindsForMode(args.mode)),
@@ -214,6 +215,18 @@ export async function getJournalData(args: {
   ]);
 
   const account = accounts.find((a) => a.id === args.accountId) ?? accounts[0] ?? null;
+
+  // En backtesting se abre en el mes del último día cargado, no en el mes actual.
+  if (account && args.mode === "backtest" && !requestedMonth) {
+    const { data: latest } = await supabase
+      .from("sessions")
+      .select("date")
+      .eq("account_id", account.id)
+      .order("date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (latest) month = latest.date.slice(0, 7);
+  }
   const empty: JournalData = {
     mode: args.mode,
     accounts,

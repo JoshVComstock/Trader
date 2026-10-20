@@ -103,6 +103,11 @@ export async function createTrade(raw: unknown): Promise<ActionResult<CreateTrad
     session = { ...session, opened_at: openedAt };
   }
 
+  // En backtesting no se cierra la sesión a mano: un día cerrado se reabre para seguir cargando datos.
+  if (mode === "backtest" && session.status === "closed") {
+    await supabase.from("sessions").update({ status: "open", closed_at: null }).eq("id", session.id);
+    session = { ...session, status: "open" };
+  }
   if (session.status === "blocked") return lockedError("SESSION_BLOCKED")!;
   if (session.status === "closed") return lockedError("SESSION_CLOSED")!;
 

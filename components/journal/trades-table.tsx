@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 import { ChevronLeftIcon, ChevronRightIcon, LoaderIcon, TriangleAlertIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";

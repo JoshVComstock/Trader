@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 import type { ComponentProps, ReactNode } from "react";
 
 /** Botón de opción con estado presionado. Grande para el pulgar, sin animaciones. */

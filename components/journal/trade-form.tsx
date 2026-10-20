@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 import { ChevronDownIcon, ImagePlusIcon, TriangleAlertIcon, OctagonXIcon, XIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";

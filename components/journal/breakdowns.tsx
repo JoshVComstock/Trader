@@ -1,4 +1,4 @@
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 import type { Bucket } from "@/lib/calc/metrics";
 import { compactMoney, percent, rValue } from "@/lib/format";
 

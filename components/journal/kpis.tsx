@@ -1,4 +1,4 @@
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 import type { Kpis } from "@/lib/calc/metrics";
 import { decimal, money, percent, rValue, signedMoney } from "@/lib/format";
 

@@ -24,6 +24,7 @@ import type { Account, JournalTrade, Session, Strategy } from "@/lib/data";
 import { toLocalInput } from "@/lib/format";
 import type { EngineTrade, Rule } from "@/lib/rules";
 import type { TradeInput } from "@/lib/schemas";
+import { addDays, fromLocal, localDate } from "@/lib/time-core";
 import { uploadScreenshot } from "@/lib/upload";
 import { CheckinDialog } from "./checkin-dialog";
 import { CloseSessionDialog } from "./close-session-dialog";
@@ -103,8 +104,15 @@ function newTradeValues(
 
   let openedAt = "";
   if (data.mode === "backtest") {
-    const base = prev?.opened_at ? Date.parse(prev.opened_at) + 15 * 60_000 : Date.now();
-    openedAt = toLocalInput(new Date(base).toISOString());
+    // Sigue donde quedó el backtest; si ese día ya se bloqueó, salta al siguiente a las 09:00.
+    const prevDay = prev?.opened_at ? localDate(prev.opened_at) : null;
+    const dayBlocked = prevDay !== null && data.session?.date === prevDay && data.session.status === "blocked";
+    const base = !prev?.opened_at
+      ? new Date()
+      : dayBlocked
+        ? fromLocal(addDays(prevDay, 1), "09:00")
+        : new Date(Date.parse(prev.opened_at) + 15 * 60_000);
+    openedAt = toLocalInput(base.toISOString());
   }
 
   return {
@@ -145,6 +153,61 @@ export function payloadToValues(p: TradeInput): TradeFormValues {
   };
 }
 
+/**
+ * Guardado optimista: la operación aparece al instante como pendiente y se confirma después.
+ * Si falla, queda guardada en el navegador para reintentar sin perder los datos.
+ */
+async function submitTrade(payload: TradeInput, file: Blob | null, onNoSession: () => void) {
+  pendingStore.update((list) => [
+    ...list.filter((p) => p.payload.id !== payload.id),
+    { payload, status: "saving", file, createdAt: Date.now() },
+  ]);
+  let res: Awaited<ReturnType<typeof createTrade>>;
+  try {
+    res = await createTrade(payload);
+  } catch {
+    res = { ok: false, error: "Sin conexión con el servidor. Tus datos quedan guardados aquí.", code: "unknown" };
+  }
+
+  if (!res.ok) {
+    pendingStore.update((list) =>
+      list.map((p) => (p.payload.id === payload.id ? { ...p, status: "error", error: res.error } : p)),
+    );
+    toast.error(res.error, {
+      duration: 8000,
+      action:
+        res.code === "unknown"
+          ? { label: "Reintentar", onClick: () => void submitTrade(payload, file, onNoSession) }
+          : undefined,
+    });
+    if (res.code === "no_session") onNoSession();
+    return;
+  }
+
+  pendingStore.update((list) =>
+    list.map((p) => (p.payload.id === payload.id ? { ...p, status: "saved", createdAt: Date.now(), file: null } : p)),
+  );
+
+  const { sessionStatus, violations, limits } = res.data;
+  if (sessionStatus === "blocked") {
+    const msg = limits.find((l) => l.action === "block")?.message ?? violations.find((v) => v.action === "block")?.message;
+    toast.warning("Sesión bloqueada", { description: msg, duration: 10000 });
+  } else if (violations.length > 0) {
+    toast.warning("Guardada con avisos", { description: violations.map((v) => v.message).join(" "), duration: 8000 });
+  } else if (limits.length > 0) {
+    toast.warning("Guardada", { description: limits[0].message, duration: 8000 });
+  } else {
+    toast.success("Operación guardada");
+  }
+
+  if (file) {
+    uploadScreenshot(payload.id, file).then(
+      () => toast.success("Captura subida"),
+      (e: unknown) => toast.error(e instanceof Error ? e.message : "No pudimos subir la captura"),
+    );
+  }
+}
+
 export function JournalProvider({ data, children }: { data: JournalClientData; children: ReactNode }) {
   const router = useRouter();
   const isDesktop = useIsDesktop();
@@ -178,56 +241,7 @@ export function JournalProvider({ data, children }: { data: JournalClientData; c
   }, [serverIds, pendingAll]);
 
   const submit = useCallback(
-    async (payload: TradeInput, file: Blob | null) => {
-      pendingStore.update((list) => [
-        ...list.filter((p) => p.payload.id !== payload.id),
-        { payload, status: "saving", file, createdAt: Date.now() },
-      ]);
-      let res: Awaited<ReturnType<typeof createTrade>>;
-      try {
-        res = await createTrade(payload);
-      } catch {
-        res = { ok: false, error: "Sin conexión con el servidor. Tus datos quedan guardados aquí.", code: "unknown" };
-      }
-
-      if (!res.ok) {
-        pendingStore.update((list) =>
-          list.map((p) => (p.payload.id === payload.id ? { ...p, status: "error", error: res.error } : p)),
-        );
-        toast.error(res.error, {
-          duration: 8000,
-          action:
-            res.code === "unknown"
-              ? { label: "Reintentar", onClick: () => void submit(payload, file) }
-              : undefined,
-        });
-        if (res.code === "no_session") setCheckinOpen(true);
-        return;
-      }
-
-      pendingStore.update((list) =>
-        list.map((p) => (p.payload.id === payload.id ? { ...p, status: "saved", createdAt: Date.now(), file: null } : p)),
-      );
-
-      const { sessionStatus, violations, limits } = res.data;
-      if (sessionStatus === "blocked") {
-        const msg = limits.find((l) => l.action === "block")?.message ?? violations.find((v) => v.action === "block")?.message;
-        toast.warning("Sesión bloqueada", { description: msg, duration: 10000 });
-      } else if (violations.length > 0) {
-        toast.warning("Guardada con avisos", { description: violations.map((v) => v.message).join(" "), duration: 8000 });
-      } else if (limits.length > 0) {
-        toast.warning("Guardada", { description: limits[0].message, duration: 8000 });
-      } else {
-        toast.success("Operación guardada");
-      }
-
-      if (file) {
-        uploadScreenshot(payload.id, file).then(
-          () => toast.success("Captura subida"),
-          (e: unknown) => toast.error(e instanceof Error ? e.message : "No pudimos subir la captura"),
-        );
-      }
-    },
+    (payload: TradeInput, file: Blob | null) => submitTrade(payload, file, () => setCheckinOpen(true)),
     [],
   );
 

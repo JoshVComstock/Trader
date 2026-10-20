@@ -18,7 +18,8 @@ import { DisciplineStrip } from "./discipline-strip";
 import { EquityChart } from "./equity-chart";
 import { JournalProvider } from "./journal-context";
 import { KpiRow } from "./kpis";
-import { AppMenu, RegisterFab, TopBar } from "./top-bar";
+import { AppMenu } from "@/components/app/app-menu";
+import { RegisterFab, TopBar } from "./top-bar";
 import { TradesTable } from "./trades-table";
 
 /** La página del journal: una sola, siete bloques, de arriba abajo. */

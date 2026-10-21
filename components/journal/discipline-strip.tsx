@@ -12,6 +12,7 @@ import { dayLabel } from "@/lib/format";
 import { computeMeters, type EngineTrade, type Meter } from "@/lib/rules";
 import { cn } from "@/lib/utils";
 import { useJournal } from "./journal-context";
+import { CalmSelfMessage, PauseBanner, usePause } from "./pause";
 import { plannedMinutes, SessionTimerPanel, useSessionClock } from "./session-timer";
 
 function MeterBar({ meter }: { meter: Meter }) {
@@ -45,6 +46,7 @@ function MeterBar({ meter }: { meter: Meter }) {
 /** Bloque 3: medidores en vivo de la sesión. Va arriba porque es lo que hay que mirar mientras se opera. */
 export function DisciplineStrip() {
   const { data, pending, openCheckin, openCloseSession } = useJournal();
+  const pause = usePause();
   const { session, mode } = data;
   const sessionClock = useSessionClock(mode === "live" ? session : null, data.rules);
   const [reopening, startReopen] = useTransition();
@@ -162,6 +164,8 @@ export function DisciplineStrip() {
         </div>
       </div>
 
+      <PauseBanner pause={pause} />
+
       {session.status === "blocked" && (
         <div role="status" className="flex gap-3 rounded-lg border border-loss/25 bg-loss/10 px-4 py-3 text-sm">
           <LockIcon className="mt-0.5 size-4 shrink-0 text-loss" />
@@ -171,6 +175,9 @@ export function DisciplineStrip() {
           </p>
         </div>
       )}
+
+      {/* Cuando más cuesta respetar el plan: bloqueado, en pausa o al borde de un límite. */}
+      {(session.status === "blocked" || pause.active || meters.some((m) => m.level !== "ok")) && <CalmSelfMessage />}
     </Panel>
   );
 }

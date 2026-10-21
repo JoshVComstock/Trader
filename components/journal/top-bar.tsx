@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, HourglassIcon, PlusIcon } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AppHeader } from "@/components/app/app-header";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,8 @@ import type { Account } from "@/lib/data";
 import { monthLabel } from "@/lib/format";
 import { shiftMonth } from "@/lib/time-core";
 import { useJournal } from "./journal-context";
-import { SessionTimerChip, useSessionClock } from "./session-timer";
+import { usePause } from "./pause";
+import { clock, SessionTimerChip, useSessionClock } from "./session-timer";
 
 /** Bloque 1 del journal: cabecera de la app + barra de cuenta, mes, temporizador y registrar. */
 export function TopBar({
@@ -117,6 +118,15 @@ function JournalToolbar({
 
 export function RegisterButton({ className }: { className?: string }) {
   const { startTrade } = useJournal();
+  const pause = usePause();
+  if (pause.active) {
+    return (
+      <Button className={className} size="lg" variant="outline" onClick={startTrade} aria-disabled>
+        <HourglassIcon />
+        Pausa <span className="num">{clock(pause.remainingSec)}</span>
+      </Button>
+    );
+  }
   return (
     <Button className={className} size="lg" onClick={startTrade}>
       <PlusIcon />
@@ -128,13 +138,16 @@ export function RegisterButton({ className }: { className?: string }) {
 /** Botón flotante en móvil: al alcance del pulgar. */
 export function RegisterFab() {
   const { startTrade } = useJournal();
+  const pause = usePause();
   return (
     <Button
       onClick={startTrade}
+      variant={pause.active ? "secondary" : "default"}
+      aria-disabled={pause.active || undefined}
       className="fixed right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-40 h-14 rounded-full px-5 text-base shadow-lg shadow-black/30 sm:hidden"
     >
-      <PlusIcon className="size-5" />
-      Registrar
+      {pause.active ? <HourglassIcon className="size-5" /> : <PlusIcon className="size-5" />}
+      {pause.active ? <span className="num">Pausa {clock(pause.remainingSec)}</span> : "Registrar"}
     </Button>
   );
 }

@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import type { Kpis } from "@/lib/calc/metrics";
 import { decimal, money, percent, rValue, signedMoney } from "@/lib/format";
+import type { Streak } from "@/lib/psych";
 
 function tone(value: number | null) {
   if (value === null || value === 0) return "text-foreground";
@@ -15,6 +16,7 @@ export function KpiRow({
   grossProfit,
   grossLoss,
   currency,
+  streak,
 }: {
   kpis: Kpis;
   wins: number;
@@ -22,6 +24,8 @@ export function KpiRow({
   grossProfit: number;
   grossLoss: number;
   currency: string;
+  /** Racha de disciplina; si viene, se muestra como quinto número. */
+  streak?: Streak | null;
 }) {
   const items = [
     {
@@ -50,8 +54,25 @@ export function KpiRow({
     },
   ];
 
+  if (streak) {
+    items.push({
+      label: "Racha de disciplina",
+      value: `${streak.current} ${streak.current === 1 ? "día" : "días"}`,
+      className: streak.current > 0 ? "text-brand" : "text-muted-foreground",
+      sub: streak.brokenOnLast
+        ? `Se cortó el último día · mejor ${streak.best}`
+        : `Respetando todas tus reglas · mejor ${streak.best}`,
+    });
+  }
+
   return (
-    <section aria-label="Resumen del mes" className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border lg:grid-cols-4">
+    <section
+      aria-label="Resumen del mes"
+      className={cn(
+        "grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border",
+        streak ? "lg:grid-cols-5 [&>*:last-child]:col-span-2 lg:[&>*:last-child]:col-span-1" : "lg:grid-cols-4",
+      )}
+    >
       {items.map((it) => (
         <div key={it.label} className="bg-card px-4 py-5 sm:px-6">
           <p className="text-sm text-muted-foreground">{it.label}</p>

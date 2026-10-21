@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/utils";
-import { CheckIcon, ChevronDownIcon, ImagePlusIcon, OctagonXIcon, TriangleAlertIcon, XIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon, ImagePlusIcon, MapPinIcon, OctagonXIcon, SirenIcon, TriangleAlertIcon, XIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
@@ -16,7 +16,9 @@ import { defaultPnl, isWithSpike } from "@/lib/calc/trade";
 import { CHECKLIST_GROUPS, type Checklist } from "@/lib/domain/checklist";
 import { INSTRUMENTS } from "@/lib/domain/instruments";
 import { DIRECTION_LABEL, MOOD_LABEL, MOODS, OUTCOME_LABEL, type JournalMode, type Outcome } from "@/lib/domain/types";
-import type { Session, Strategy } from "@/lib/data";
+import type { Observation, Session, Strategy } from "@/lib/data";
+import { ANXIETY_LABEL, ANXIETY_LEVELS, defaultPsychFlags, type PsychFlags } from "@/lib/domain/psych";
+import { detectTilt } from "@/lib/psych";
 import { money, timeShort } from "@/lib/format";
 import { imageFromClipboard } from "@/lib/image";
 import { fromLocalInput } from "@/lib/local-input";
@@ -40,6 +42,8 @@ export interface TradeFormValues {
   closed_at: string;
   note: string;
   checklist: Checklist;
+  /** "" o "1"…"5". */
+  anxiety: string;
 }
 
 function parseNumber(value: string): number | null {
@@ -66,6 +70,7 @@ export function toPayload(v: TradeFormValues): unknown {
     closed_at: v.closed_at ? fromLocalInput(v.closed_at) : null,
     note: v.note.trim() || null,
     checklist: v.checklist,
+    anxiety: v.anxiety ? Number(v.anxiety) : null,
   };
 }
 
@@ -94,6 +99,8 @@ export function TradeForm({
   sessionOpenedAt,
   showShortcuts,
   session = null,
+  psych = defaultPsychFlags(),
+  observations = [],
   onSubmit,
   onCancel,
 }: {
@@ -105,11 +112,15 @@ export function TradeForm({
   balance: number;
   currency: string;
   /** Operaciones de la sesión para el aviso previo, por día (YYYY-MM-DD). */
-  sessionTrades: (date: string | null) => { trades: EngineTrade[]; openedAt: string | null };
+  sessionTrades: (date: string | null) => { trades: (EngineTrade & { with_spike: boolean })[]; openedAt: string | null };
   sessionOpenedAt: string | null;
   showShortcuts: boolean;
   /** Sesión en vivo: el formulario muestra cuánto tiempo queda. */
   session?: Session | null;
+  /** Funciones de control mental activas. */
+  psych?: PsychFlags;
+  /** Zonas y patrones anotados, para recordarlos al elegir el índice. */
+  observations?: Observation[];
   onSubmit: (payload: TradeInput, file: Blob | null) => void;
   onCancel: () => void;
 }) {
@@ -154,7 +165,11 @@ export function TradeForm({
         : defaultPnl(values.result, stakeNumber, tpNumber !== null && Number.isFinite(tpNumber) ? tpNumber : null);
     const openedRef = mode === "backtest" ? (ctx.openedAt && ctx.openedAt < openedAt ? ctx.openedAt : openedAt) : sessionOpenedAt;
     if (!openedRef) return null;
-    return evaluateTrade({
+    const candidateSpike = values.instrument && values.direction ? isWithSpike(values.instrument, values.direction) : true;
+    const tilt = psych.tilt_detector
+      ? detectTilt({ opened_at: openedAt, stake: stakeNumber, pnl, with_spike: candidateSpike }, ctx.trades)
+      : null;
+    const engine = evaluateTrade({
       candidate: {
         opened_at: openedAt,
         closed_at: values.closed_at ? fromLocalInput(values.closed_at) : null,
@@ -167,7 +182,8 @@ export function TradeForm({
       balance,
       rules,
     });
-  }, [editing, values, stakeNumber, tpNumber, mode, sessionTrades, sessionOpenedAt, balance, rules]);
+    return { ...engine, tilt };
+  }, [editing, values, stakeNumber, tpNumber, mode, sessionTrades, sessionOpenedAt, balance, rules, psych.tilt_detector]);
 
   const submit = handleSubmit((payload) => onSubmit(payload, file));
   const submitted = formState.isSubmitted;
@@ -215,7 +231,9 @@ export function TradeForm({
       : undefined;
   const riskHint =
     balance > 0 && stakeNumber > 0 ? `${((stakeNumber / balance) * 100).toFixed(1)}% de ${money(balance, currency, 0)}` : undefined;
+  const tilt = preview_?.tilt && preview_.tilt.level !== "none" ? preview_.tilt : null;
   const warnings = preview_ ? preview_.violations.length + preview_.limits.length : 0;
+  const instrumentNotes = observations.filter((o) => o.instrument === values.instrument).slice(0, 3);
 
   return (
     <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col" noValidate>
@@ -289,6 +307,20 @@ export function TradeForm({
               </div>
             )}
           />
+          {instrumentNotes.length > 0 && (
+            <ul className="mt-2 space-y-1 rounded-lg bg-brand/5 px-3 py-2 text-xs text-muted-foreground">
+              {instrumentNotes.map((o) => (
+                <li key={o.id} className="flex gap-2">
+                  <MapPinIcon className="mt-0.5 size-3.5 shrink-0 text-brand" />
+                  <span>
+                    {o.level !== null && <span className="num text-foreground">{o.level} </span>}
+                    {o.note}
+                    {o.times_seen > 1 && <span className="text-subtle"> · visto {o.times_seen} veces</span>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
           <Controller
             control={control}
             name="direction"
@@ -357,6 +389,37 @@ export function TradeForm({
                     <Choice selected={field.value === ""} onClick={() => field.onChange("")}>
                       Ninguna
                     </Choice>
+                  </div>
+                )}
+              />
+            </div>
+          )}
+
+          {psych.anxiety_scale && (
+            <div className="mt-4 space-y-1.5">
+              <span className="flex items-baseline justify-between gap-2 text-sm text-muted-foreground">
+                Ansiedad / ganas de recuperar
+                <span className="text-xs text-subtle">1 nada · 5 mucha</span>
+              </span>
+              <Controller
+                control={control}
+                name="anxiety"
+                render={({ field }) => (
+                  <div className="grid grid-cols-5 gap-1.5" role="radiogroup" aria-label="Ansiedad">
+                    {ANXIETY_LEVELS.map((n) => (
+                      <Choice
+                        key={n}
+                        role="radio"
+                        aria-checked={field.value === String(n)}
+                        selected={field.value === String(n)}
+                        tone={n >= 4 ? "loss" : "brand"}
+                        className="h-11 flex-col gap-0 px-0"
+                        onClick={() => field.onChange(field.value === String(n) ? "" : String(n))}
+                      >
+                        <span className="num text-base leading-none">{n}</span>
+                        <span className="text-[10px] font-normal opacity-70">{ANXIETY_LABEL[n]}</span>
+                      </Choice>
+                    ))}
                   </div>
                 )}
               />
@@ -468,6 +531,18 @@ export function TradeForm({
 
       {/* Aviso previo + guardar */}
       <footer className="space-y-3 border-t bg-popover px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6">
+        {tilt && (
+          <div
+            role="alert"
+            className={cn(
+              "flex gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium",
+              tilt.level === "tilt" ? "bg-loss text-background" : "border border-loss/40 bg-loss/10 text-loss",
+            )}
+          >
+            <SirenIcon className="mt-0.5 size-4 shrink-0" />
+            <span>{tilt.message}</span>
+          </div>
+        )}
         {preview_ && warnings > 0 && (
           <ul className="space-y-1.5 rounded-lg border border-warn/25 bg-warn/5 px-3 py-2 text-sm">
             {preview_.violations.map((v) => (

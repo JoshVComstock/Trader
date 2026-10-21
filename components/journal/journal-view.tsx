@@ -2,7 +2,10 @@ import Link from "next/link";
 import { AppHeader } from "@/components/app/app-header";
 import { PageHeader, PageMain } from "@/components/app/layout";
 import { Button } from "@/components/ui/button";
+import { CalendarCheckIcon } from "lucide-react";
 import {
+  byAnxiety,
+  byMood,
   byHour,
   byInstrument,
   bySpike,
@@ -12,6 +15,7 @@ import {
   equityCurve,
 } from "@/lib/calc/metrics";
 import type { JournalData } from "@/lib/data";
+import { disciplineStreak } from "@/lib/psych";
 import { monthRange } from "@/lib/time-core";
 import { ByHourCard, ByInstrumentCard, SpikeCard } from "./breakdowns";
 import { MonthCalendar } from "./calendar";
@@ -19,6 +23,9 @@ import { DisciplineStrip } from "./discipline-strip";
 import { EquityChart } from "./equity-chart";
 import { JournalProvider } from "./journal-context";
 import { KpiRow } from "./kpis";
+import { MoodComparison } from "./mood-comparison";
+import { ObservationsPanel } from "./observations-panel";
+import { Reminders } from "./reminders";
 import { RegisterFab, TopBar } from "./top-bar";
 import { TradesTable } from "./trades-table";
 
@@ -63,6 +70,9 @@ export function JournalView({ data }: { data: JournalData }) {
   const weeks = calendarWeeks(data.month, monthRows);
   const spike = bySpike(data.trades);
   const balance = currentBalance(account.start_balance, data.daily);
+  const psych = data.settings.psych;
+  const streak = psych.discipline_streak && mode === "live" ? disciplineStreak(data.daily) : null;
+  const moods = psych.mood_comparison ? byMood(data.trades) : null;
 
   return (
     <JournalProvider
@@ -78,6 +88,10 @@ export function JournalView({ data }: { data: JournalData }) {
         lastTrade: data.lastTrade,
         balance,
         today: data.today,
+        settings: data.settings,
+        calmMessages: data.calmMessages,
+        lastReview: data.lastReview,
+        observations: data.observations,
       }}
     >
       {/* 1 · Barra superior */}
@@ -98,7 +112,23 @@ export function JournalView({ data }: { data: JournalData }) {
           grossProfit={totals.gp}
           grossLoss={totals.gl}
           currency={account.currency}
+          streak={streak}
         />
+
+        {data.reviewDue && mode === "live" && (
+          <Link
+            href="/revision"
+            className="flex items-center gap-3 rounded-xl border border-brand/40 bg-brand/10 px-5 py-4 transition-colors hover:bg-brand/15"
+          >
+            <CalendarCheckIcon className="size-5 shrink-0 text-brand" />
+            <span className="min-w-0">
+              <span className="block font-medium">Es domingo: revisa tu semana</span>
+              <span className="block text-sm text-muted-foreground">
+                Tu mejor y tu peor operación, la regla que más rompiste y qué cambias la semana que viene.
+              </span>
+            </span>
+          </Link>
+        )}
 
         {/* 3 · Tira de disciplina */}
         <DisciplineStrip />
@@ -116,9 +146,23 @@ export function JournalView({ data }: { data: JournalData }) {
           <ByHourCard buckets={byHour(data.trades)} />
         </div>
 
+        {moods && (
+          <MoodComparison
+            calm={moods.calm}
+            rushed={moods.rushed}
+            tired={moods.tired}
+            anxiety={psych.anxiety_scale ? byAnxiety(data.trades) : null}
+          />
+        )}
+
         {/* 7 · Tabla de operaciones */}
         <TradesTable currency={account.currency} />
+
+        {/* Backtesting: zonas y patrones que vas notando, para llevarlos a la cuenta real. */}
+        {mode === "backtest" && <ObservationsPanel accountId={account.id} />}
       </PageMain>
+
+      {mode === "live" && psych.notifications && <Reminders />}
 
       <RegisterFab />
     </JournalProvider>

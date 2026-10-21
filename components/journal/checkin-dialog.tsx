@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { MOOD_LABEL, MOODS, type Mood } from "@/lib/domain/types";
+import type { WeeklyReview } from "@/lib/data";
 import type { Rule } from "@/lib/rules";
 import { cn } from "@/lib/utils";
 
@@ -42,12 +43,15 @@ export function CheckinDialog({
   onOpenChange,
   accountId,
   rules,
+  lastReview,
   onDone,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   accountId: string;
   rules: Rule[];
+  /** Lo que respondiste en la revisión del domingo; se recuerda toda la semana. */
+  lastReview?: WeeklyReview | null;
   onDone: (mood: Mood) => void;
 }) {
   const ruleMinutes = rules.find((r) => r.type === "max_session_minutes" && r.enabled);
@@ -96,6 +100,12 @@ export function CheckinDialog({
         </DialogHeader>
 
         <div className="space-y-6">
+          {lastReview && (
+            <div className="rounded-lg border border-brand/30 bg-brand/10 px-4 py-3 text-sm">
+              <p className="text-xs font-medium tracking-wide text-brand uppercase">El domingo te dijiste</p>
+              <p className="mt-1 whitespace-pre-wrap">{lastReview.answer}</p>
+            </div>
+          )}
           <fieldset>
             <legend className="mb-2 text-sm font-medium">¿Cómo llegas?</legend>
             <div className="grid grid-cols-3 gap-2">

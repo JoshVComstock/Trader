@@ -1,16 +1,22 @@
-import { ArrowLeftIcon } from "lucide-react";
 import type { Metadata } from "next";
-import Link from "next/link";
-import { AppMenu } from "@/components/app/app-menu";
+import { AppHeader } from "@/components/app/app-header";
+import { PageHeader, PageMain, Panel } from "@/components/app/layout";
 import { AccountsSection } from "@/components/settings/accounts-section";
 import { RulesSection } from "@/components/settings/rules-section";
 import { StrategiesSection } from "@/components/settings/strategies-section";
-import { listAccounts, listRules, listStrategies, requireUser } from "@/lib/data";
 import { cloudinaryConfigured } from "@/lib/cloudinary";
+import { listAccounts, listRules, listStrategies, requireUser } from "@/lib/data";
 
 export const metadata: Metadata = { title: "Ajustes" };
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+const SECTIONS = [
+  { id: "cuentas", label: "Cuentas" },
+  { id: "reglas", label: "Reglas" },
+  { id: "estrategias", label: "Estrategias" },
+  { id: "capturas", label: "Capturas" },
+];
 
 export default async function SettingsPage({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
@@ -25,45 +31,51 @@ export default async function SettingsPage({ searchParams }: { searchParams: Sea
 
   return (
     <>
-      <header className="sticky top-0 z-40 border-b bg-background/85 pt-[env(safe-area-inset-top)] backdrop-blur-md">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-2.5">
-          <Link href="/journal" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-            <ArrowLeftIcon className="size-4" />
-            Bitácora
-          </Link>
-          <AppMenu />
-        </div>
-      </header>
+      <AppHeader />
 
-      <main className="mx-auto max-w-3xl space-y-10 px-4 pt-6 pb-16">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Ajustes</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{user.email}</p>
-        </div>
+      <PageMain>
+        <PageHeader title="Ajustes" description={user.email} />
 
         {welcome && (
-          <div className="rounded-xl border border-brand/30 bg-brand/10 px-4 py-3 text-sm">
+          <div className="rounded-xl border border-brand/30 bg-brand/10 px-5 py-4 text-sm">
             <p className="font-medium">Bienvenido a Racha.</p>
             <p className="mt-1 text-muted-foreground">
-              Crea tu cuenta de trading con el balance con el que empiezas. Tus reglas ya vienen con valores razonables:
-              revísalas ahora, cuando estás tranquilo. Para practicar sin dinero real, crea también una cuenta de backtesting.
+              Crea tu cuenta de trading con el balance en dólares con el que empiezas. Tus reglas ya vienen con valores
+              razonables: revísalas ahora, cuando estás tranquilo. Para practicar sin dinero real, crea también una cuenta
+              de backtesting.
             </p>
           </div>
         )}
 
-        <AccountsSection accounts={accounts} openNew={newKind ?? (accounts.length === 0 ? "real" : null)} />
-        <RulesSection rules={rules} />
-        <StrategiesSection strategies={strategies} />
+        <div className="grid gap-6 lg:grid-cols-[12rem_minmax(0,1fr)] lg:gap-10">
+          {/* Índice de secciones, fijo al costado en escritorio */}
+          <nav aria-label="Secciones de ajustes" className="hidden lg:block">
+            <ul className="sticky top-24 space-y-1 text-sm">
+              {SECTIONS.map((s) => (
+                <li key={s.id}>
+                  <a href={`#${s.id}`} className="block rounded-lg px-3 py-2 text-muted-foreground hover:bg-muted/60 hover:text-foreground">
+                    {s.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
 
-        <section className="space-y-2 text-sm">
-          <h2 className="text-lg font-semibold">Capturas</h2>
-          <p className="text-muted-foreground">
-            {cloudinaryConfigured()
-              ? "Cloudinary está configurado. Las capturas se guardan como privadas y solo se ven con enlaces firmados que caducan en una hora."
-              : "Cloudinary no está configurado: no se pueden subir capturas. Añade CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY y CLOUDINARY_API_SECRET (ver README)."}
-          </p>
-        </section>
-      </main>
+          <div className="min-w-0 space-y-10">
+            <AccountsSection accounts={accounts} openNew={newKind ?? (accounts.length === 0 ? "real" : null)} />
+            <RulesSection rules={rules} />
+            <StrategiesSection strategies={strategies} />
+
+            <Panel id="capturas" title="Capturas" description="Dónde se guardan las imágenes de tus operaciones.">
+              <p className="text-sm text-muted-foreground">
+                {cloudinaryConfigured()
+                  ? "Cloudinary está configurado. Las capturas se guardan como privadas y solo se ven con enlaces firmados que caducan en una hora."
+                  : "Cloudinary no está configurado: no se pueden subir capturas. Añade CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY y CLOUDINARY_API_SECRET (ver README)."}
+              </p>
+            </Panel>
+          </div>
+        </div>
+      </PageMain>
     </>
   );
 }

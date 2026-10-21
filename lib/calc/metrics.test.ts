@@ -8,6 +8,9 @@ import {
   currentBalance,
   equityCurve,
   type BreakdownTrade,
+  byAnxiety,
+  byMood,
+  type PsychTrade,
   type DailyMetrics,
 } from "./metrics";
 
@@ -143,5 +146,46 @@ describe("desgloses", () => {
     expect(h.map((x) => x.label)).toEqual(["09:00", "11:00"]);
     expect(h[0].pnl).toBe(1);
     expect(h[1].pnl).toBe(1);
+  });
+});
+
+describe("byMood y byAnxiety", () => {
+  const p = (partial: Partial<PsychTrade>): PsychTrade => ({
+    instrument: "BOOM500",
+    with_spike: true,
+    opened_at: "2026-10-20T13:10:00Z",
+    pnl: 2,
+    r_multiple: 2,
+    outcome: "win",
+    mood: "tranquilo",
+    anxiety: 1,
+    violations: 0,
+    ...partial,
+  });
+  const trades = [
+    p({}),
+    p({ pnl: -1, r_multiple: -1, outcome: "loss" }),
+    p({ mood: "acelerado", anxiety: 5, with_spike: false, pnl: -1, r_multiple: -1, outcome: "loss", violations: 2 }),
+    p({ mood: "acelerado", anxiety: 4, pnl: 2, r_multiple: 2, outcome: "win" }),
+  ];
+
+  it("compara tranquilo con acelerado", () => {
+    const m = byMood(trades);
+    expect(m.calm.trades).toBe(2);
+    expect(m.calm.avgR).toBe(0.5);
+    expect(m.calm.againstPct).toBe(0);
+    expect(m.rushed.winRate).toBe(0.5);
+    expect(m.rushed.againstPct).toBe(0.5);
+    expect(m.rushed.brokenPct).toBe(0.5);
+    expect(m.tired.trades).toBe(0);
+    expect(m.tired.avgR).toBeNull();
+  });
+
+  it("agrupa por ansiedad solo los niveles usados", () => {
+    expect(byAnxiety(trades).map((b) => [b.key, b.trades])).toEqual([
+      ["1", 2],
+      ["4", 1],
+      ["5", 1],
+    ]);
   });
 });

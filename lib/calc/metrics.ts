@@ -203,3 +203,57 @@ export function byHour(trades: readonly BreakdownTrade[]): Bucket[] {
       bucket(String(h), `${String(h).padStart(2, "0")}:00`, list),
     );
 }
+
+/** Lo mínimo para comparar por estado mental. */
+export interface PsychTrade extends BreakdownTrade {
+  mood: "tranquilo" | "acelerado" | "cansado" | null;
+  anxiety: number | null;
+  violations: number;
+}
+
+export interface MoodBucket {
+  key: string;
+  label: string;
+  trades: number;
+  winRate: number | null;
+  /** R promedio por operación. */
+  avgR: number | null;
+  rSum: number;
+  /** Porcentaje de operaciones contra el spike. */
+  againstPct: number | null;
+  /** Porcentaje de operaciones que rompieron alguna regla. */
+  brokenPct: number | null;
+}
+
+function moodBucket(key: string, label: string, list: readonly PsychTrade[]): MoodBucket {
+  const wins = list.filter((t) => t.outcome === "win").length;
+  const losses = list.filter((t) => t.outcome === "loss").length;
+  const rSum = list.reduce((a, t) => a + t.r_multiple, 0);
+  const n = list.length;
+  return {
+    key,
+    label,
+    trades: n,
+    winRate: wins + losses > 0 ? wins / (wins + losses) : null,
+    avgR: n ? round(rSum / n, 2) : null,
+    rSum: round(rSum, 2),
+    againstPct: n ? list.filter((t) => !t.with_spike).length / n : null,
+    brokenPct: n ? list.filter((t) => t.violations > 0).length / n : null,
+  };
+}
+
+/** Tranquilo frente a acelerado (y cansado, aparte). */
+export function byMood(trades: readonly PsychTrade[]): { calm: MoodBucket; rushed: MoodBucket; tired: MoodBucket } {
+  return {
+    calm: moodBucket("tranquilo", "Tranquilo", trades.filter((t) => t.mood === "tranquilo")),
+    rushed: moodBucket("acelerado", "Acelerado", trades.filter((t) => t.mood === "acelerado")),
+    tired: moodBucket("cansado", "Cansado", trades.filter((t) => t.mood === "cansado")),
+  };
+}
+
+/** Por nivel de ansiedad (1–5), solo los niveles con operaciones. */
+export function byAnxiety(trades: readonly PsychTrade[]): MoodBucket[] {
+  return [1, 2, 3, 4, 5]
+    .map((level) => moodBucket(String(level), String(level), trades.filter((t) => t.anxiety === level)))
+    .filter((b) => b.trades > 0);
+}

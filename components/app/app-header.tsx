@@ -1,6 +1,6 @@
 "use client";
 
-import { DownloadIcon, FlaskConicalIcon, LogOutIcon, MenuIcon, MoonIcon, NotebookPenIcon, SettingsIcon, SunIcon } from "lucide-react";
+import { CalendarCheckIcon, DownloadIcon, FlaskConicalIcon, LogOutIcon, MenuIcon, MoonIcon, NotebookPenIcon, SettingsIcon, SunIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { href: "/journal", label: "Bitácora", hint: "Real y demo", icon: NotebookPenIcon },
   { href: "/backtesting", label: "Backtesting", hint: "Sin dinero real", icon: FlaskConicalIcon },
+  { href: "/revision", label: "Revisión", hint: "Tu semana, los domingos", icon: CalendarCheckIcon },
   { href: "/ajustes", label: "Ajustes", hint: "Cuentas, reglas, estrategias", icon: SettingsIcon },
 ] as const;
 

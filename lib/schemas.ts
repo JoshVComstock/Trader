@@ -77,6 +77,7 @@ export const checkinSchema = z.object({
   mood_before: moodSchema,
   read_rules: z.boolean(),
   goal_r: z.number().finite().min(-100).max(100).nullable(),
+  planned_minutes: z.number().int().min(5, "Mínimo 5 minutos").max(600, "Máximo 10 horas").nullable(),
 });
 export type CheckinInput = z.infer<typeof checkinSchema>;
 
@@ -94,7 +95,8 @@ export const accountSchema = z.object({
   id: z.uuid().optional(),
   label: z.string().trim().min(1, "Ponle un nombre").max(60),
   kind: z.enum(["real", "demo", "backtest"]),
-  currency: z.string().trim().length(3, "Código de 3 letras").toUpperCase(),
+  // Por ahora todas las cuentas van en dólares.
+  currency: z.literal("USD").default("USD"),
   start_balance: money.min(0, "No puede ser negativo"),
 });
 export type AccountInput = z.infer<typeof accountSchema>;

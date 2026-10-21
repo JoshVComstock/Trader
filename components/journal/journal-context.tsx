@@ -82,7 +82,7 @@ function payloadToEngine(p: TradeInput): EngineTrade {
 }
 
 function numberString(n: number | null | undefined): string {
-  return n === null || n === undefined ? "" : String(n).replace(".", ",");
+  return n === null || n === undefined ? "" : String(n);
 }
 
 /** Valores iniciales: la operación anterior de la sesión manda (índice, stake, TP). */
@@ -327,6 +327,7 @@ export function JournalProvider({ data, children }: { data: JournalClientData; c
       sessionTrades={sessionContext}
       sessionOpenedAt={data.session?.opened_at ?? null}
       showShortcuts={isDesktop}
+      session={data.mode === "live" ? data.session : null}
       onCancel={close}
       onSubmit={(payload, file) => {
         close();
@@ -343,9 +344,9 @@ export function JournalProvider({ data, children }: { data: JournalClientData; c
 
       {isDesktop ? (
         <Dialog open={formOpen} onOpenChange={(o) => !o && close()}>
-          <DialogContent className="flex max-h-[min(92vh,52rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
-            <DialogHeader className="px-4 pt-4 pb-3">
-              <DialogTitle>{title}</DialogTitle>
+          <DialogContent className="flex max-h-[min(94vh,60rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+            <DialogHeader className="border-b px-6 pt-5 pb-4">
+              <DialogTitle className="text-lg">{title}</DialogTitle>
               <DialogDescription>{description}</DialogDescription>
             </DialogHeader>
             {form}
@@ -354,7 +355,7 @@ export function JournalProvider({ data, children }: { data: JournalClientData; c
       ) : (
         <Sheet open={formOpen} onOpenChange={(o) => !o && close()}>
           <SheetContent side="bottom" className="flex max-h-[94svh] flex-col gap-0 rounded-t-2xl p-0">
-            <SheetHeader className="px-4 pt-4 pb-2">
+            <SheetHeader className="border-b px-4 pt-4 pb-3">
               <SheetTitle>{title}</SheetTitle>
               <SheetDescription>{description}</SheetDescription>
             </SheetHeader>

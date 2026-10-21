@@ -16,7 +16,7 @@ import type { JournalMode } from "@/lib/domain/types";
 import { toLocalInput } from "@/lib/format";
 import type { Rule } from "@/lib/rules";
 
-const str = (n: number | null) => (n === null ? "" : String(n).replace(".", ","));
+const str = (n: number | null) => (n === null ? "" : String(n));
 
 function toValues(t: JournalTrade): TradeFormValues {
   const expected = defaultPnl(t.outcome, t.stake, t.tp);
@@ -99,8 +99,8 @@ export function TradeActions({
 
       {isDesktop ? (
         <Dialog open={editing} onOpenChange={setEditing}>
-          <DialogContent className="flex max-h-[min(92vh,52rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
-            <DialogHeader className="px-4 pt-4 pb-3">
+          <DialogContent className="flex max-h-[min(94vh,60rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+            <DialogHeader className="border-b px-6 pt-5 pb-4">
               <DialogTitle>Corregir operación</DialogTitle>
               <DialogDescription>Se recalculan R, resultado y spike. Las reglas no se vuelven a evaluar.</DialogDescription>
             </DialogHeader>

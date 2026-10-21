@@ -45,6 +45,8 @@ export const tradeInputSchema = z
     closed_at: isoDate.nullable(),
     note: z.string().trim().max(4000, "Máximo 4000 caracteres").nullable(),
     checklist: checklistSchema,
+    /** Ansiedad / ganas de recuperar, 1–5. Opcional: se puede apagar en Ajustes. */
+    anxiety: z.number().int().min(1).max(5).nullable().default(null),
   })
   .superRefine((v, ctx) => {
     if (v.pnl !== null) {
@@ -149,6 +151,27 @@ export function parseRules(
   }
   return out;
 }
+
+export const userSettingsSchema = z.object({
+  psych: z.record(z.string(), z.boolean()),
+  pause_phrase: z.string().trim().max(280, "Máximo 280 caracteres").nullable(),
+});
+
+export const weeklyReviewSchema = z.object({
+  week_start: z.iso.date(),
+  answer: z.string().trim().min(1, "Escribe qué vas a cambiar").max(2000),
+});
+
+export const observationSchema = z.object({
+  id: z.uuid().optional(),
+  account_id: z.uuid().nullable(),
+  instrument: instrumentSchema.nullable(),
+  kind: z.enum(["zona", "patron", "nota"]),
+  level: z.number().finite().positive("Precio inválido").nullable(),
+  timeframe: z.string().trim().max(10).nullable(),
+  note: z.string().trim().min(1, "Describe lo que viste").max(1000),
+});
+export type ObservationInput = z.infer<typeof observationSchema>;
 
 export const noteSchema = z.object({
   trade_id: z.uuid(),

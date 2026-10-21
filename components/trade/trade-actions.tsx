@@ -35,6 +35,7 @@ function toValues(t: JournalTrade): TradeFormValues {
     closed_at: t.closed_at ? toLocalInput(t.closed_at) : "",
     note: t.note ?? "",
     checklist: t.checklist,
+    anxiety: t.anxiety ? String(t.anxiety) : "",
   };
 }
 

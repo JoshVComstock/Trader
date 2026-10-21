@@ -28,6 +28,28 @@
 - Maquetación compartida en `components/app/layout.tsx` (`Container`, `PageMain`, `PageHeader`, `Panel`) e
   inputs con unidad (`InputGroup`, `Segmented`): todas las tarjetas y formularios usan las mismas piezas.
 
+**Control mental (21 oct)**
+
+- Todo se puede apagar en Ajustes → Control mental (tabla `user_settings`, jsonb `psych`). Lo apagado
+  desaparece de la bitácora, del formulario y del check-in.
+- Pausa después de una pérdida: dura lo que diga la regla "Pausa mínima entre operaciones" y se cuenta desde
+  el cierre de la pérdida. Si esa regla está apagada, no hay pausa. Es una pausa de la interfaz (el botón
+  Registrar se bloquea); el servidor sigue registrando la violación de la regla como antes.
+- Ansiedad 1–5 por operación (`trades.anxiety`), cruzada con R en la tarjeta "Tú acelerado vs tú tranquilo".
+- Tu yo tranquilo: reflexiones de cierre de días con "seguí el plan = sí". Se muestra una por día cuando
+  estás bloqueado, en pausa o cerca de un límite.
+- Racha de disciplina: días operados seguidos sin violaciones (los días sin operar no cortan). Llegar a un
+  límite y bloquear la sesión cuenta como respetar la regla.
+- Detector de tilt: en una ventana de 10 minutos, pérdida + stake mayor + contra el spike = tilt; pérdida + una
+  de las otras = riesgo. Solo avisa en el formulario, no bloquea.
+- Revisión semanal (`/revision`, tabla `weekly_reviews`): aviso los domingos, filtros por cuenta, índice,
+  spike, estrategia, estado, resultado y plan. La respuesta aparece en el check-in de la semana siguiente.
+- Observaciones de backtesting (tabla `observations`): zonas, patrones y notas con "Se repitió". Las de un
+  índice aparecen en el formulario de registro al elegirlo, también en real.
+- Recordatorios: notificaciones locales (5 min antes y al terminar la sesión, inicio del horario permitido).
+  Llegan con la app abierta o en segundo plano; con la app cerrada del todo haría falta Web Push con un
+  servidor (pendiente).
+
 **Técnicas**
 
 - `cacheComponents` desactivado: toda la app es autenticada y dinámica; no compensa la complejidad.

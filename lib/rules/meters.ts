@@ -37,12 +37,14 @@ export function computeMeters(args: {
   /** Instante contra el que se mide el tiempo (ahora, o el cierre de la sesión). */
   now: string;
   rules: readonly Rule[];
+  /** Duración que planeaste en el check-in; si existe, manda sobre la regla. */
+  plannedMinutes?: number | null;
 }): Meter[] {
   const { sessionTrades, rules } = args;
   const maxTrades = findRule(rules, "max_trades")?.params.n ?? null;
   const maxLosses = findRule(rules, "max_losses")?.params.n ?? null;
   const maxPsych = findRule(rules, "max_psych_errors")?.params.n ?? null;
-  const maxMinutes = findRule(rules, "max_session_minutes")?.params.minutes ?? null;
+  const maxMinutes = args.plannedMinutes ?? findRule(rules, "max_session_minutes")?.params.minutes ?? null;
 
   const trades = sessionTrades.length;
   const losses = sessionTrades.filter((t) => t.pnl < 0).length;

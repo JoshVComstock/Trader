@@ -1,26 +1,18 @@
 "use client";
 
-import { cn } from "@/lib/utils";
 import { LockIcon } from "lucide-react";
-import { useEffect, useState, useTransition } from "react";
+import { useTransition } from "react";
 import { toast } from "sonner";
 import { reopenSession } from "@/app/actions/sessions";
+import { Panel } from "@/components/app/layout";
 import { Button } from "@/components/ui/button";
 import { defaultPnl } from "@/lib/calc/trade";
 import { MOOD_LABEL } from "@/lib/domain/types";
 import { dayLabel } from "@/lib/format";
-import { computeMeters, type Meter } from "@/lib/rules";
+import { computeMeters, type EngineTrade, type Meter } from "@/lib/rules";
+import { cn } from "@/lib/utils";
 import { useJournal } from "./journal-context";
-
-function useNow(enabled: boolean): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!enabled) return;
-    const id = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(id);
-  }, [enabled]);
-  return now;
-}
+import { plannedMinutes, SessionTimerPanel, useSessionClock } from "./session-timer";
 
 function MeterBar({ meter }: { meter: Meter }) {
   const pct = meter.limit ? Math.min(100, (meter.value / meter.limit) * 100) : 0;
@@ -29,15 +21,15 @@ function MeterBar({ meter }: { meter: Meter }) {
   return (
     <div className="min-w-0">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="truncate text-xs text-muted-foreground">{meter.label}</span>
-        <span className={cn("num text-sm font-medium", text)}>
+        <span className="truncate text-sm text-muted-foreground">{meter.label}</span>
+        <span className={cn("num text-base font-semibold", text)}>
           {meter.value}
-          {meter.limit !== null && <span className="text-subtle">/{meter.limit}</span>}
-          {meter.unit && <span className="ml-0.5 text-xs text-subtle">{meter.unit}</span>}
+          {meter.limit !== null && <span className="font-normal text-subtle">/{meter.limit}</span>}
+          {meter.unit && <span className="ml-0.5 text-xs font-normal text-subtle">{meter.unit}</span>}
         </span>
       </div>
       <div
-        className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted"
+        className="mt-2 h-2 overflow-hidden rounded-full bg-muted"
         role="meter"
         aria-label={meter.label}
         aria-valuenow={meter.value}
@@ -50,50 +42,55 @@ function MeterBar({ meter }: { meter: Meter }) {
   );
 }
 
-/** Medidores en vivo de la sesión. Va arriba porque es lo que hay que mirar mientras se opera. */
+/** Bloque 3: medidores en vivo de la sesión. Va arriba porque es lo que hay que mirar mientras se opera. */
 export function DisciplineStrip() {
   const { data, pending, openCheckin, openCloseSession } = useJournal();
   const { session, mode } = data;
-  const live = mode === "live" && session?.status === "open";
-  const now = useNow(live);
+  const sessionClock = useSessionClock(mode === "live" ? session : null, data.rules);
   const [reopening, startReopen] = useTransition();
 
   if (mode === "live" && !session) {
     return (
-      <section aria-label="Disciplina" className="flex flex-col gap-3 rounded-xl border border-dashed px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm font-medium">Todavía no abriste la sesión de hoy</p>
-          <p className="text-sm text-muted-foreground">Un check-in rápido antes de la primera operación: cómo llegas y tus reglas.</p>
+      <Panel aria-label="Disciplina" className="border-dashed bg-transparent">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-medium">Todavía no abriste la sesión de hoy</p>
+            <p className="text-sm text-muted-foreground">
+              Un check-in rápido antes de la primera operación: cómo llegas, cuánto tiempo vas a operar y tus reglas.
+            </p>
+          </div>
+          <Button variant="outline" size="lg" onClick={openCheckin}>
+            Hacer check-in
+          </Button>
         </div>
-        <Button variant="outline" onClick={openCheckin}>
-          Hacer check-in
-        </Button>
-      </section>
+      </Panel>
     );
   }
 
   if (!session) {
     return (
-      <section aria-label="Disciplina" className="rounded-xl border border-dashed px-4 py-4 text-sm text-muted-foreground">
-        Registra tu primera operación de backtesting: cada día de datos se vuelve una sesión con las mismas reglas que en real.
-      </section>
+      <Panel aria-label="Disciplina" className="border-dashed bg-transparent">
+        <p className="text-sm text-muted-foreground">
+          Registra tu primera operación de backtesting: cada día de datos se vuelve una sesión con las mismas reglas que en real.
+        </p>
+      </Panel>
     );
   }
 
   // En vivo, lo que se acaba de registrar cuenta ya, antes de que confirme el servidor.
-  const optimistic =
+  const optimistic: EngineTrade[] =
     mode !== "live"
       ? []
       : pending
           .filter((p) => p.status !== "error" && !data.sessionTrades.some((t) => t.id === p.payload.id))
-          .map(({ payload: p }) => ({
-            opened_at: p.opened_at ?? new Date(now).toISOString(),
+          .map(({ payload: p, createdAt }) => ({
+            opened_at: p.opened_at ?? new Date(createdAt).toISOString(),
             closed_at: p.closed_at,
             stake: p.stake,
             pnl: p.pnl ?? defaultPnl(p.result, p.stake, p.tp),
             impulse: p.checklist.impulse,
           }));
-  const trades = [
+  const trades: EngineTrade[] = [
     ...data.sessionTrades.map((t) => ({
       opened_at: t.opened_at,
       closed_at: t.closed_at,
@@ -105,60 +102,75 @@ export function DisciplineStrip() {
   ];
   const lastAt = trades.reduce((max, t) => (t.opened_at > max ? t.opened_at : max), session.opened_at);
   const reference =
-    mode === "backtest" ? lastAt : session.status === "open" ? new Date(now).toISOString() : (session.closed_at ?? lastAt);
-  const meters = computeMeters({ sessionTrades: trades, sessionOpenedAt: session.opened_at, now: reference, rules: data.rules });
+    mode === "backtest"
+      ? lastAt
+      : new Date(Date.parse(session.opened_at) + (sessionClock?.elapsedSec ?? 0) * 1000).toISOString();
+  const meters = computeMeters({
+    sessionTrades: trades,
+    sessionOpenedAt: session.opened_at,
+    now: reference,
+    rules: data.rules,
+    plannedMinutes: mode === "live" ? plannedMinutes(session, data.rules) : null,
+  });
+  // Con el temporizador a la vista, el medidor de tiempo sobra en vivo.
+  const visibleMeters = mode === "live" ? meters.filter((m) => m.key !== "minutes") : meters;
+
+  const title = mode === "live" ? "Sesión de hoy" : `Última sesión de backtesting · ${dayLabel(session.date)}`;
+  const description = session.mood_before ? `Llegaste ${MOOD_LABEL[session.mood_before].toLowerCase()}` : undefined;
+
+  const actions = (
+    <>
+      {mode === "live" && session.status === "open" && (
+        <Button variant="outline" size="sm" onClick={openCloseSession}>
+          Cerrar sesión
+        </Button>
+      )}
+      {mode === "live" && session.status === "closed" && (
+        <>
+          <span className="text-xs text-subtle">Cerrada</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={reopening}
+            onClick={() =>
+              startReopen(async () => {
+                const res = await reopenSession(session.id);
+                if (!res.ok) toast.error(res.error);
+              })
+            }
+          >
+            Reabrir
+          </Button>
+        </>
+      )}
+      {session.status === "blocked" && !session.journal && mode === "live" && (
+        <Button variant="ghost" size="sm" onClick={openCloseSession}>
+          Escribir reflexión
+        </Button>
+      )}
+    </>
+  );
 
   return (
-    <section aria-label="Disciplina" className="rounded-xl border bg-card">
-      <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-3">
-        <p className="text-xs text-muted-foreground">
-          {mode === "live" ? "Sesión de hoy" : `Última sesión de backtesting · ${dayLabel(session.date)}`}
-          {session.mood_before && <span className="text-subtle"> · llegaste {MOOD_LABEL[session.mood_before].toLowerCase()}</span>}
-        </p>
-        {mode === "live" && session.status === "open" && (
-          <Button variant="ghost" size="sm" onClick={openCloseSession}>
-            Cerrar sesión
-          </Button>
-        )}
-        {mode === "live" && session.status === "closed" && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-subtle">Cerrada</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={reopening}
-              onClick={() =>
-                startReopen(async () => {
-                  const res = await reopenSession(session.id);
-                  if (!res.ok) toast.error(res.error);
-                })
-              }
-            >
-              Reabrir
-            </Button>
-          </div>
-        )}
-        {session.status === "blocked" && !session.journal && mode === "live" && (
-          <Button variant="ghost" size="sm" onClick={openCloseSession}>
-            Escribir reflexión
-          </Button>
-        )}
-      </div>
-
-      <div className="grid grid-cols-2 gap-x-6 gap-y-4 px-4 pt-3 pb-4 md:grid-cols-4">
-        {meters.map((m) => (
-          <MeterBar key={m.key} meter={m} />
-        ))}
+    <Panel aria-label="Disciplina" title={title} description={description} actions={actions} bodyClassName="space-y-4">
+      <div className={cn("grid gap-5", sessionClock && "lg:grid-cols-[minmax(16rem,22rem)_1fr] lg:items-center")}>
+        {sessionClock && <SessionTimerPanel clock={sessionClock} />}
+        <div className={cn("grid grid-cols-2 gap-x-6 gap-y-4", visibleMeters.length === 4 ? "md:grid-cols-4" : "md:grid-cols-3")}>
+          {visibleMeters.map((m) => (
+            <MeterBar key={m.key} meter={m} />
+          ))}
+        </div>
       </div>
 
       {session.status === "blocked" && (
-        <div role="status" className="flex gap-3 border-t border-loss/20 bg-loss/10 px-4 py-3 text-sm">
+        <div role="status" className="flex gap-3 rounded-lg border border-loss/25 bg-loss/10 px-4 py-3 text-sm">
           <LockIcon className="mt-0.5 size-4 shrink-0 text-loss" />
           <p>
-            {session.blocked_reason ?? "Rompiste una regla que bloquea la sesión. Se acabó el día — lo decidiste tú cuando estabas tranquilo."}
+            {session.blocked_reason ??
+              "Rompiste una regla que bloquea la sesión. Se acabó el día — lo decidiste tú cuando estabas tranquilo."}
           </p>
         </div>
       )}
-    </section>
+    </Panel>
   );
 }

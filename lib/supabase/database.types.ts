@@ -115,14 +115,14 @@ isOneToOne: false
                   ]
                 },"sessions": {
                   Row: {
-                    "account_id": string,"blocked_reason": string | null,"closed_at": string | null,"created_at": string,"date": string,"followed_plan": boolean | null,"goal_r": number | null,"id": string,"journal": string | null,"mood_before": Database["public"]['Enums']["mood"] | null,"opened_at": string,"read_rules": boolean,"status": Database["public"]['Enums']["session_status"],"user_id": string
+                    "account_id": string,"blocked_reason": string | null,"closed_at": string | null,"created_at": string,"date": string,"followed_plan": boolean | null,"goal_r": number | null,"id": string,"journal": string | null,"mood_before": Database["public"]['Enums']["mood"] | null,"opened_at": string,"planned_minutes": number | null,"read_rules": boolean,"status": Database["public"]['Enums']["session_status"],"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "account_id": string,"blocked_reason"?: string | null,"closed_at"?: string | null,"created_at"?: string,"date": string,"followed_plan"?: boolean | null,"goal_r"?: number | null,"id"?: string,"journal"?: string | null,"mood_before"?: Database["public"]['Enums']["mood"] | null,"opened_at"?: string,"read_rules"?: boolean,"status"?: Database["public"]['Enums']["session_status"],"user_id"?: string
+                    "account_id": string,"blocked_reason"?: string | null,"closed_at"?: string | null,"created_at"?: string,"date": string,"followed_plan"?: boolean | null,"goal_r"?: number | null,"id"?: string,"journal"?: string | null,"mood_before"?: Database["public"]['Enums']["mood"] | null,"opened_at"?: string,"planned_minutes"?: number | null,"read_rules"?: boolean,"status"?: Database["public"]['Enums']["session_status"],"user_id"?: string
                   }
                   Update: {
-                    "account_id"?: string,"blocked_reason"?: string | null,"closed_at"?: string | null,"created_at"?: string,"date"?: string,"followed_plan"?: boolean | null,"goal_r"?: number | null,"id"?: string,"journal"?: string | null,"mood_before"?: Database["public"]['Enums']["mood"] | null,"opened_at"?: string,"read_rules"?: boolean,"status"?: Database["public"]['Enums']["session_status"],"user_id"?: string
+                    "account_id"?: string,"blocked_reason"?: string | null,"closed_at"?: string | null,"created_at"?: string,"date"?: string,"followed_plan"?: boolean | null,"goal_r"?: number | null,"id"?: string,"journal"?: string | null,"mood_before"?: Database["public"]['Enums']["mood"] | null,"opened_at"?: string,"planned_minutes"?: number | null,"read_rules"?: boolean,"status"?: Database["public"]['Enums']["session_status"],"user_id"?: string
                   }
                   Relationships: [
                     {

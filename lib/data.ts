@@ -48,6 +48,7 @@ export interface Session {
   journal: string | null;
   status: SessionStatus;
   blocked_reason: string | null;
+  planned_minutes: number | null;
 }
 
 export interface JournalTrade {
@@ -115,7 +116,7 @@ export async function listRules(supabase: ServerClient): Promise<Rule[]> {
 }
 
 const SESSION_COLUMNS =
-  "id, account_id, date, opened_at, closed_at, mood_before, read_rules, goal_r, followed_plan, journal, status, blocked_reason";
+  "id, account_id, date, opened_at, closed_at, mood_before, read_rules, goal_r, followed_plan, journal, status, blocked_reason, planned_minutes";
 
 const TRADE_COLUMNS =
   "id, session_id, account_id, strategy_id, instrument, direction, with_spike, opened_at, closed_at, stake, tp, pnl, r_multiple, outcome, mood, moved_sl, in_plan, checklist, note, sessions!inner(date), rule_violations(count)";

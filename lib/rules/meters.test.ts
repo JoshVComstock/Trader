@@ -45,6 +45,19 @@ describe("computeMeters", () => {
     expect(m.find((x) => x.key === "minutes")?.level).toBe("hit");
   });
 
+  it("la duración planeada en el check-in manda sobre la regla", () => {
+    const m = computeMeters({
+      sessionTrades: [],
+      sessionOpenedAt: "2026-10-20T13:00:00Z",
+      now: "2026-10-20T13:40:00Z",
+      rules,
+      plannedMinutes: 45,
+    });
+    const minutes = m.find((x) => x.key === "minutes");
+    expect(minutes?.limit).toBe(45);
+    expect(minutes?.level).toBe("near");
+  });
+
   it("sin regla activa no hay límite", () => {
     const m = computeMeters({
       sessionTrades: [t(2)],

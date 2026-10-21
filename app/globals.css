@@ -114,6 +114,12 @@
     @apply font-sans;
     -webkit-tap-highlight-color: transparent;
   }
+  /* En pantallas grandes todo un poco más grande: cifras y textos se leen de lejos. */
+  @media (min-width: 1280px) {
+    html {
+      font-size: 17px;
+    }
+  }
   body {
     @apply bg-background text-foreground;
     font-variant-numeric: tabular-nums;

@@ -4,6 +4,7 @@ import { PencilIcon } from "lucide-react";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { updateTradeNote } from "@/app/actions/trades";
+import { Panel } from "@/components/app/layout";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -28,19 +29,20 @@ export function NoteEditor({ tradeId, initial }: { tradeId: string; initial: str
   }
 
   return (
-    <section className="rounded-xl border bg-card px-4 py-3">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-medium">Nota</h2>
-        {!editing && saved && (
+    <Panel
+      title="Nota"
+      actions={
+        !editing &&
+        saved && (
           <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
             <PencilIcon />
             Editar
           </Button>
-        )}
-      </div>
-
+        )
+      }
+    >
       {editing ? (
-        <div className="mt-2 space-y-2">
+        <div className="space-y-2">
           <Textarea
             value={note}
             onChange={(e) => setNote(e.target.value)}
@@ -71,17 +73,17 @@ export function NoteEditor({ tradeId, initial }: { tradeId: string; initial: str
           </div>
         </div>
       ) : saved ? (
-        <p className="mt-2 text-sm whitespace-pre-wrap">{saved}</p>
+        <p className="text-sm whitespace-pre-wrap">{saved}</p>
       ) : (
         <button
           type="button"
           onClick={() => setEditing(true)}
-          className="mt-2 flex w-full items-center gap-2 rounded-lg border border-dashed px-3 py-3 text-left text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="flex w-full items-center gap-2 rounded-lg border border-dashed px-3 py-3 text-left text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           <PencilIcon className="size-4" />
           Escribe qué pasó en esta operación. Dentro de un mes es lo que más vas a agradecer.
         </button>
       )}
-    </section>
+    </Panel>
   );
 }

@@ -2,11 +2,12 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/utils";
-import { ChevronDownIcon, ImagePlusIcon, TriangleAlertIcon, OctagonXIcon, XIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon, ImagePlusIcon, OctagonXIcon, TriangleAlertIcon, XIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
-import { Choice, FieldError, FieldLabel } from "@/components/app/choice";
+import { Choice, FieldError } from "@/components/app/choice";
+import { InputGroup, Segmented } from "@/components/app/input-group";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
@@ -15,13 +16,14 @@ import { defaultPnl, isWithSpike } from "@/lib/calc/trade";
 import { CHECKLIST_GROUPS, type Checklist } from "@/lib/domain/checklist";
 import { INSTRUMENTS } from "@/lib/domain/instruments";
 import { DIRECTION_LABEL, MOOD_LABEL, MOODS, OUTCOME_LABEL, type JournalMode, type Outcome } from "@/lib/domain/types";
-import type { Strategy } from "@/lib/data";
-import { money } from "@/lib/format";
+import type { Session, Strategy } from "@/lib/data";
+import { money, timeShort } from "@/lib/format";
 import { imageFromClipboard } from "@/lib/image";
 import { fromLocalInput } from "@/lib/local-input";
 import { evaluateTrade, type EngineTrade, type Rule } from "@/lib/rules";
 import { tradeInputSchema, type TradeInput } from "@/lib/schemas";
 import { localDate } from "@/lib/time-core";
+import { SessionTimerChip, useSessionClock } from "./session-timer";
 
 export interface TradeFormValues {
   id: string;
@@ -91,6 +93,7 @@ export function TradeForm({
   sessionTrades,
   sessionOpenedAt,
   showShortcuts,
+  session = null,
   onSubmit,
   onCancel,
 }: {
@@ -105,6 +108,8 @@ export function TradeForm({
   sessionTrades: (date: string | null) => { trades: EngineTrade[]; openedAt: string | null };
   sessionOpenedAt: string | null;
   showShortcuts: boolean;
+  /** Sesión en vivo: el formulario muestra cuánto tiempo queda. */
+  session?: Session | null;
   onSubmit: (payload: TradeInput, file: Blob | null) => void;
   onCancel: () => void;
 }) {
@@ -121,6 +126,7 @@ export function TradeForm({
   const [preview, setPreview] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(editing || mode === "backtest");
   const errors = formState.errors;
+  const sessionClock = useSessionClock(session, rules);
 
   useEffect(() => {
     if (!file) return;
@@ -203,59 +209,75 @@ export function TradeForm({
   }, [editing]);
 
   const activeStrategies = strategies.filter((s) => s.active || s.id === initial.strategy_id);
-  const tpHint = Number.isFinite(stakeNumber) && stakeNumber > 0 && tpNumber && Number.isFinite(tpNumber)
-    ? `${(tpNumber / stakeNumber).toFixed(1).replace(".", ",")}R`
-    : undefined;
+  const tpHint =
+    Number.isFinite(stakeNumber) && stakeNumber > 0 && tpNumber && Number.isFinite(tpNumber)
+      ? `${(tpNumber / stakeNumber).toFixed(1)}R`
+      : undefined;
+  const riskHint =
+    balance > 0 && stakeNumber > 0 ? `${((stakeNumber / balance) * 100).toFixed(1)}% de ${money(balance, currency, 0)}` : undefined;
+  const warnings = preview_ ? preview_.violations.length + preview_.limits.length : 0;
 
   return (
-    <form
-      onSubmit={submit}
-      className="flex min-h-0 flex-1 flex-col"
-      noValidate
-    >
-      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 pt-1 pb-4">
+    <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col" noValidate>
+      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 pt-2 pb-5 sm:px-6">
+        {sessionClock && sessionClock.running && (
+          <SessionTimerChip clock={sessionClock} className="w-full justify-center sm:w-auto" />
+        )}
+
         {/* 1 · Resultado */}
-        <div>
-          <FieldLabel hint={showShortcuts ? "G · P · E" : undefined}>Resultado</FieldLabel>
+        <FormSection step={1} title="Resultado" hint={showShortcuts ? "Teclas G · P · E" : undefined} error={errors.result ? "Elige el resultado" : undefined}>
           <Controller
             control={control}
             name="result"
             render={({ field }) => (
-              <div className="grid grid-cols-3 gap-2" role="group" aria-label="Resultado">
+              <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Resultado">
                 {(["win", "loss", "tie"] as const).map((o) => (
                   <Choice
                     key={o}
+                    role="radio"
+                    aria-checked={field.value === o}
                     selected={field.value === o}
                     tone={RESULT_TONE[o]}
                     className="h-14 text-base"
                     onClick={() => field.onChange(o)}
                   >
                     {OUTCOME_LABEL[o]}
-                    {showShortcuts && <kbd className="num text-[10px] opacity-50">{RESULT_KEY[o]}</kbd>}
+                    {showShortcuts && <kbd className="num rounded border px-1 text-[10px] opacity-60">{RESULT_KEY[o]}</kbd>}
                   </Choice>
                 ))}
               </div>
             )}
           />
-          <FieldError message={errors.result?.message ? "Elige el resultado" : undefined} />
-        </div>
+        </FormSection>
 
-        {/* 2 · Instrumento */}
-        <div>
-          <FieldLabel>Índice</FieldLabel>
+        {/* 2 · Índice y dirección */}
+        <FormSection
+          step={2}
+          title="Índice y dirección"
+          hint={
+            withSpike === null ? undefined : (
+              <span className={cn("rounded px-1.5 py-0.5 font-medium", withSpike ? "bg-muted text-muted-foreground" : "bg-warn/15 text-warn")}>
+                {withSpike ? "A favor del spike" : "Contra el spike"}
+              </span>
+            )
+          }
+          error={errors.instrument?.message}
+        >
           <Controller
             control={control}
             name="instrument"
             render={({ field }) => (
-              <div className="space-y-2" role="group" aria-label="Índice">
+              <div className="space-y-1.5" role="radiogroup" aria-label="Índice">
                 {(["boom", "crash"] as const).map((family) => (
-                  <div key={family} className="grid grid-cols-[4.25rem_repeat(5,minmax(0,1fr))] items-center gap-1.5">
-                    <span className="text-xs text-muted-foreground">{family === "boom" ? "Boom" : "Crash"}</span>
+                  <div key={family} className="grid grid-cols-[4rem_repeat(5,minmax(0,1fr))] items-center gap-1.5">
+                    <span className="text-sm text-muted-foreground">{family === "boom" ? "Boom" : "Crash"}</span>
                     {INSTRUMENTS.filter((i) => i.family === family).map((i) => (
                       <Choice
                         key={i.code}
+                        role="radio"
+                        aria-checked={field.value === i.code}
                         selected={field.value === i.code}
-                        className="num min-h-9 px-0 text-[13px]"
+                        className="num min-h-10 px-0 text-sm"
                         onClick={() => field.onChange(i.code)}
                         aria-label={i.label}
                       >
@@ -267,183 +289,176 @@ export function TradeForm({
               </div>
             )}
           />
-          <FieldError message={errors.instrument?.message} />
-        </div>
-
-        {/* 3 · Dirección */}
-        <div>
-          <FieldLabel
-            hint={
-              withSpike === null ? undefined : (
-                <span className={withSpike ? "text-muted-foreground" : "text-warn"}>
-                  {withSpike ? "A favor del spike" : "Contra el spike"}
-                </span>
-              )
-            }
-          >
-            Dirección
-          </FieldLabel>
           <Controller
             control={control}
             name="direction"
             render={({ field }) => (
-              <div className="grid grid-cols-2 gap-2" role="group" aria-label="Dirección">
+              <div className="mt-3 grid grid-cols-2 gap-2" role="radiogroup" aria-label="Dirección">
                 {(["buy", "sell"] as const).map((d) => (
-                  <Choice key={d} selected={field.value === d} className="h-11" onClick={() => field.onChange(d)}>
+                  <Choice key={d} role="radio" aria-checked={field.value === d} selected={field.value === d} className="h-11" onClick={() => field.onChange(d)}>
                     {DIRECTION_LABEL[d]}
                   </Choice>
                 ))}
               </div>
             )}
           />
-        </div>
+        </FormSection>
 
-        {/* 4 · Stake */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <FieldLabel hint={balance > 0 && stakeNumber > 0 ? `${((stakeNumber / balance) * 100).toFixed(1).replace(".", ",")} % de ${money(balance, currency, 0)}` : undefined}>
-              Stake (riesgo)
-            </FieldLabel>
-            <div className="relative">
-              <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">$</span>
-              <Input
+        {/* 3 · Riesgo, estado y estrategia */}
+        <FormSection step={3} title="Riesgo y estado">
+          <div className="grid gap-4 sm:grid-cols-[11rem_minmax(0,1fr)]">
+            <label className="block space-y-1.5">
+              <span className="block text-sm text-muted-foreground">Stake (riesgo)</span>
+              <InputGroup
+                prefix="$"
                 {...register("stake")}
                 inputMode="decimal"
                 autoComplete="off"
-                className="num h-11 pl-7 text-base"
+                className="h-11"
                 aria-invalid={Boolean(errors.stake)}
               />
-            </div>
-            <FieldError message={errors.stake?.message} />
-          </div>
-
-          {/* 6 · Cómo te sentías */}
-          <div>
-            <FieldLabel>Cómo te sentías</FieldLabel>
-            <Controller
-              control={control}
-              name="mood"
-              render={({ field }) => (
-                <div className="grid grid-cols-3 gap-1" role="group" aria-label="Cómo te sentías">
-                  {MOODS.map((m) => (
-                    <Choice
-                      key={m}
-                      selected={field.value === m}
-                      className="h-11 px-0 text-xs"
-                      onClick={() => {
-                        field.onChange(m);
-                        setValue("checklist.calm", m === "tranquilo");
-                      }}
-                    >
-                      {MOOD_LABEL[m]}
-                    </Choice>
-                  ))}
-                </div>
-              )}
-            />
-          </div>
-        </div>
-
-        {/* 5 · Estrategia */}
-        {activeStrategies.length > 0 && (
-          <div>
-            <FieldLabel>Estrategia</FieldLabel>
-            <Controller
-              control={control}
-              name="strategy_id"
-              render={({ field }) => (
-                <div className="flex flex-wrap gap-1.5" role="group" aria-label="Estrategia">
-                  {activeStrategies.map((s) => (
-                    <Choice key={s.id} selected={field.value === s.id} onClick={() => field.onChange(s.id)}>
-                      {s.name}
-                    </Choice>
-                  ))}
-                  <Choice selected={field.value === ""} onClick={() => field.onChange("")}>
-                    Ninguna
-                  </Choice>
-                </div>
-              )}
-            />
-          </div>
-        )}
-
-        {mode === "backtest" && (
-          <div>
-            <FieldLabel hint="Hora de La Paz">Fecha y hora de entrada</FieldLabel>
-            <Input type="datetime-local" {...register("opened_at")} className="num h-11" aria-invalid={Boolean(errors.opened_at)} />
-            <FieldError message={errors.opened_at?.message} />
-          </div>
-        )}
-
-        {/* Checklist */}
-        <div className="space-y-3">
-          {CHECKLIST_GROUPS.map((group) => (
-            <div key={group.title}>
-              <FieldLabel>{group.title}</FieldLabel>
-              <div className="flex flex-wrap gap-1.5">
-                {group.items.map((item) => (
-                  <Controller
-                    key={item.key}
-                    control={control}
-                    name={`checklist.${item.key}`}
-                    render={({ field }) => (
-                      <Choice
-                        selected={field.value}
-                        tone={item.key === "impulse" && field.value ? "loss" : "brand"}
-                        className="min-h-9 text-[13px]"
-                        title={item.hint}
-                        onClick={() => field.onChange(!field.value)}
-                      >
-                        {item.label}
-                      </Choice>
-                    )}
+              {riskHint && <span className="num block text-xs text-subtle">{riskHint}</span>}
+              <FieldError message={errors.stake?.message} />
+            </label>
+            <div className="space-y-1.5">
+              <span className="block text-sm text-muted-foreground">Cómo te sentías</span>
+              <Controller
+                control={control}
+                name="mood"
+                render={({ field }) => (
+                  <Segmented
+                    aria-label="Cómo te sentías"
+                    value={field.value}
+                    options={MOODS.map((m) => ({ value: m, label: MOOD_LABEL[m] }))}
+                    onChange={(m) => {
+                      field.onChange(m);
+                      setValue("checklist.calm", m === "tranquilo");
+                    }}
+                    className="flex w-full [&>button]:h-10"
                   />
-                ))}
-              </div>
+                )}
+              />
             </div>
-          ))}
-        </div>
+          </div>
+
+          {activeStrategies.length > 0 && (
+            <div className="mt-4 space-y-1.5">
+              <span className="block text-sm text-muted-foreground">Estrategia</span>
+              <Controller
+                control={control}
+                name="strategy_id"
+                render={({ field }) => (
+                  <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Estrategia">
+                    {activeStrategies.map((s) => (
+                      <Choice key={s.id} selected={field.value === s.id} onClick={() => field.onChange(s.id)}>
+                        {s.name}
+                      </Choice>
+                    ))}
+                    <Choice selected={field.value === ""} onClick={() => field.onChange("")}>
+                      Ninguna
+                    </Choice>
+                  </div>
+                )}
+              />
+            </div>
+          )}
+
+          {mode === "backtest" && (
+            <label className="mt-4 block space-y-1.5">
+              <span className="flex items-baseline justify-between text-sm text-muted-foreground">
+                Fecha y hora de entrada
+                <span className="text-xs text-subtle">Hora de La Paz</span>
+              </span>
+              <Input type="datetime-local" {...register("opened_at")} className="num h-11" aria-invalid={Boolean(errors.opened_at)} />
+              <FieldError message={errors.opened_at?.message} />
+            </label>
+          )}
+        </FormSection>
+
+        {/* 4 · Checklist */}
+        <FormSection step={4} title="Checklist" hint="Desmarca lo que no se cumplió">
+          <div className="grid gap-3 sm:grid-cols-3">
+            {CHECKLIST_GROUPS.map((group) => (
+              <div key={group.title} className="rounded-lg border bg-muted/20 p-2">
+                <p className="px-1.5 pt-0.5 pb-1.5 text-xs font-medium tracking-wide text-subtle uppercase">{group.title}</p>
+                <div className="space-y-0.5">
+                  {group.items.map((item) => (
+                    <Controller
+                      key={item.key}
+                      control={control}
+                      name={`checklist.${item.key}`}
+                      render={({ field }) => (
+                        <CheckRow
+                          checked={field.value}
+                          danger={item.key === "impulse"}
+                          label={item.label}
+                          hint={item.hint}
+                          onToggle={() => field.onChange(!field.value)}
+                        />
+                      )}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </FormSection>
 
         {/* Más detalle */}
-        <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen}>
-          <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg py-2 text-sm text-muted-foreground hover:text-foreground">
-            Más detalle
+        <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen} className="rounded-lg border">
+          <CollapsibleTrigger className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/40">
+            <span>
+              Más detalle
+              <span className="ml-2 font-normal text-subtle">TP, P/L real, horas, nota, captura</span>
+            </span>
             <ChevronDownIcon className={cn("size-4 transition-transform", detailsOpen && "rotate-180")} />
           </CollapsibleTrigger>
-          <CollapsibleContent className="space-y-4 pt-2">
+          <CollapsibleContent className="space-y-4 border-t px-4 pt-4 pb-4">
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <FieldLabel hint={tpHint}>TP</FieldLabel>
-                <Input {...register("tp")} inputMode="decimal" className="num h-10" aria-invalid={Boolean(errors.tp)} />
+              <label className="block space-y-1.5">
+                <span className="flex items-baseline justify-between text-sm text-muted-foreground">
+                  TP {tpHint && <span className="num text-xs text-subtle">{tpHint}</span>}
+                </span>
+                <InputGroup prefix="$" {...register("tp")} inputMode="decimal" aria-invalid={Boolean(errors.tp)} />
                 <FieldError message={errors.tp?.message} />
-              </div>
-              <div>
-                <FieldLabel hint="Opcional">P/L real</FieldLabel>
-                <Input {...register("pnl")} inputMode="decimal" placeholder="Según SL/TP" className="num h-10" aria-invalid={Boolean(errors.pnl)} />
+              </label>
+              <label className="block space-y-1.5">
+                <span className="flex items-baseline justify-between text-sm text-muted-foreground">
+                  P/L real <span className="text-xs text-subtle">Opcional</span>
+                </span>
+                <InputGroup prefix="$" {...register("pnl")} inputMode="decimal" placeholder="Según SL/TP" aria-invalid={Boolean(errors.pnl)} />
                 <FieldError message={errors.pnl?.message} />
-              </div>
+              </label>
             </div>
+
             <div className="grid grid-cols-2 gap-3">
               {mode === "live" && (
-                <div>
-                  <FieldLabel>Apertura</FieldLabel>
-                  <Input type="datetime-local" {...register("opened_at")} className="num h-10 text-xs" />
+                <label className="block space-y-1.5">
+                  <span className="block text-sm text-muted-foreground">Apertura</span>
+                  <Input type="datetime-local" {...register("opened_at")} className="num h-10 text-sm" />
+                  <span className="block text-xs text-subtle">
+                    {sessionClock ? `Sesión abierta a las ${timeShort(sessionClock.openedAt)}. Vacío = ahora.` : "Vacío = ahora."}
+                  </span>
                   <FieldError message={errors.opened_at?.message} />
-                </div>
+                </label>
               )}
-              <div className={mode === "backtest" ? "col-span-2" : undefined}>
-                <FieldLabel>Cierre</FieldLabel>
-                <Input type="datetime-local" {...register("closed_at")} className="num h-10 text-xs" />
+              <label className={cn("block space-y-1.5", mode === "backtest" && "col-span-2")}>
+                <span className="block text-sm text-muted-foreground">Cierre</span>
+                <Input type="datetime-local" {...register("closed_at")} className="num h-10 text-sm" />
                 <FieldError message={errors.closed_at?.message} />
-              </div>
+              </label>
             </div>
-            <div>
-              <FieldLabel>Nota</FieldLabel>
+
+            <label className="block space-y-1.5">
+              <span className="block text-sm text-muted-foreground">Nota</span>
               <Textarea {...register("note")} rows={3} placeholder="Qué viste, qué sentiste, qué harías distinto" />
-            </div>
+            </label>
+
             {!editing && (
-              <div>
-                <FieldLabel hint="También puedes pegar con Ctrl+V">Captura</FieldLabel>
+              <div className="space-y-1.5">
+                <span className="flex items-baseline justify-between text-sm text-muted-foreground">
+                  Captura <span className="text-xs text-subtle">También puedes pegar con Ctrl+V</span>
+                </span>
                 <ShotPicker file={file} preview={preview} onFile={setFile} />
               </div>
             )}
@@ -452,34 +467,114 @@ export function TradeForm({
       </div>
 
       {/* Aviso previo + guardar */}
-      <div className="space-y-3 border-t bg-popover px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
-        {preview_ && (preview_.violations.length > 0 || preview_.limits.length > 0) && (
-          <ul className="space-y-1.5 text-xs">
+      <footer className="space-y-3 border-t bg-popover px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6">
+        {preview_ && warnings > 0 && (
+          <ul className="space-y-1.5 rounded-lg border border-warn/25 bg-warn/5 px-3 py-2 text-sm">
             {preview_.violations.map((v) => (
               <li key={v.ruleType} className={cn("flex gap-2", v.action === "block" ? "text-loss" : "text-warn")}>
-                {v.action === "block" ? <OctagonXIcon className="mt-px size-3.5 shrink-0" /> : <TriangleAlertIcon className="mt-px size-3.5 shrink-0" />}
-                <span>{v.message}{v.action === "block" && " Al guardar, la sesión se bloquea."}</span>
+                {v.action === "block" ? <OctagonXIcon className="mt-0.5 size-4 shrink-0" /> : <TriangleAlertIcon className="mt-0.5 size-4 shrink-0" />}
+                <span>
+                  {v.message}
+                  {v.action === "block" && " Al guardar, la sesión se bloquea."}
+                </span>
               </li>
             ))}
             {preview_.limits.map((l) => (
               <li key={l.ruleType} className="flex gap-2 text-warn">
-                <TriangleAlertIcon className="mt-px size-3.5 shrink-0" />
-                <span>{l.action === "block" ? "Esta es la última: " : ""}{l.message}</span>
+                <TriangleAlertIcon className="mt-0.5 size-4 shrink-0" />
+                <span>
+                  {l.action === "block" ? "Esta es la última: " : ""}
+                  {l.message}
+                </span>
               </li>
             ))}
           </ul>
         )}
         <div className="flex gap-2">
-          <Button type="button" variant="ghost" className="h-12" onClick={onCancel}>
+          <Button type="button" variant="ghost" className="h-12 px-4" onClick={onCancel}>
             Cancelar
           </Button>
           <Button type="submit" className="h-12 flex-1 text-base">
-            {editing ? "Guardar cambios" : "Guardar"}
-            {showShortcuts && <kbd className="num ml-1 text-[10px] opacity-60">Enter</kbd>}
+            {editing ? "Guardar cambios" : "Guardar operación"}
+            {showShortcuts && <kbd className="num ml-1 rounded border border-current/30 px-1 text-[10px] opacity-70">Enter</kbd>}
           </Button>
         </div>
-      </div>
+      </footer>
     </form>
+  );
+}
+
+/** Un bloque numerado del formulario. */
+function FormSection({
+  step,
+  title,
+  hint,
+  error,
+  children,
+}: {
+  step: number;
+  title: string;
+  hint?: React.ReactNode;
+  error?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <fieldset className="min-w-0">
+      <legend className="mb-2.5 flex w-full items-center justify-between gap-2">
+        <span className="flex items-center gap-2 text-sm font-semibold">
+          <span className="num flex size-5 items-center justify-center rounded-full bg-muted text-[11px] text-muted-foreground">{step}</span>
+          {title}
+        </span>
+        {hint && <span className="text-xs text-subtle">{hint}</span>}
+      </legend>
+      {children}
+      <FieldError message={error} />
+    </fieldset>
+  );
+}
+
+/** Casilla del checklist: fila entera tocable, con su caja de check. */
+function CheckRow({
+  checked,
+  danger,
+  label,
+  hint,
+  onToggle,
+}: {
+  checked: boolean;
+  danger?: boolean;
+  label: string;
+  hint?: string;
+  onToggle: () => void;
+}) {
+  const bad = danger && checked;
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      onClick={onToggle}
+      title={hint}
+      className={cn(
+        "flex w-full items-start gap-2.5 rounded-md px-1.5 py-1.5 text-left text-sm transition-colors outline-none hover:bg-muted/60 focus-visible:ring-3 focus-visible:ring-ring/50",
+        checked ? "text-foreground" : "text-muted-foreground",
+        bad && "text-loss",
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border",
+          checked ? (bad ? "border-loss bg-loss text-background" : "border-brand bg-brand text-primary-foreground") : "border-input",
+        )}
+      >
+        {checked && <CheckIcon className="size-3" strokeWidth={3} />}
+      </span>
+      <span className="leading-tight">
+        {label}
+        {hint && checked && <span className="block text-xs font-normal opacity-75">{hint}</span>}
+      </span>
+    </button>
   );
 }
 

@@ -83,7 +83,7 @@ export function AttachmentsPanel({ tradeId, initial, enabled }: { tradeId: strin
 
   return (
     <section
-      className={cn("rounded-xl border bg-card px-4 py-3", over && "border-brand")}
+      className={cn("rounded-xl border bg-card px-4 py-4 sm:px-5", over && "border-brand")}
       onDragOver={(e) => {
         e.preventDefault();
         setOver(true);
@@ -96,7 +96,7 @@ export function AttachmentsPanel({ tradeId, initial, enabled }: { tradeId: strin
       }}
     >
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-medium">Capturas</h2>
+        <h2 className="text-base font-semibold">Capturas</h2>
         {shots.length > 0 && (
           <Button variant="ghost" size="sm" onClick={() => inputRef.current?.click()}>
             <ImagePlusIcon />

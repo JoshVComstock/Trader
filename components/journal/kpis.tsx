@@ -53,10 +53,10 @@ export function KpiRow({
   return (
     <section aria-label="Resumen del mes" className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border lg:grid-cols-4">
       {items.map((it) => (
-        <div key={it.label} className="bg-card px-4 py-4 sm:px-5">
-          <p className="text-xs text-muted-foreground">{it.label}</p>
-          <p className={cn("num mt-1.5 text-2xl font-semibold tracking-tight sm:text-3xl", it.className)}>{it.value}</p>
-          <p className="num mt-1 truncate text-xs text-subtle">{it.sub}</p>
+        <div key={it.label} className="bg-card px-4 py-5 sm:px-6">
+          <p className="text-sm text-muted-foreground">{it.label}</p>
+          <p className={cn("num mt-2 text-3xl font-semibold tracking-tight sm:text-4xl", it.className)}>{it.value}</p>
+          <p className="num mt-1.5 truncate text-sm text-subtle">{it.sub}</p>
         </div>
       ))}
     </section>

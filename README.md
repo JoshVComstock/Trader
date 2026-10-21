@@ -103,7 +103,8 @@ a inicio* (Safari). Abre directo en `/journal`.
 
 ```
 app/                  rutas (journal, backtesting, detalle, ajustes, login) y Server Actions
-components/journal/   los siete bloques del journal y el formulario de registro
+components/app/       cabecera, maquetación compartida (Container, Panel) e inputs
+components/journal/   los siete bloques del journal, el temporizador y el formulario de registro
 components/trade/     detalle de operación: nota, capturas, editar/borrar
 components/settings/  cuentas, reglas, estrategias
 lib/rules/            motor de reglas puro (sin dependencias) + tests

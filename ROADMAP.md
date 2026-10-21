@@ -14,6 +14,20 @@
   propia página `/backtesting`. Cada operación lleva fecha y hora obligatorias; la sesión se crea sola por día
   de la operación (sin check-in), con las mismas reglas, bloqueo y métricas. No hay replay ni gráficos de velas.
 
+**Segunda ronda de ajustes (21 oct)**
+
+- Todo el dinero en dólares con formato `$1,234.50`. Las cuentas son siempre USD (el campo de moneda ya no se
+  edita; la columna sigue en la base por si algún día hace falta).
+- Cabecera nueva: navegación completa en escritorio (Bitácora, Backtesting, Ajustes, Exportar, tema, salir);
+  hamburguesa con panel lateral solo en móvil. En el journal, una segunda fila con cuenta, mes, temporizador y
+  el botón de registrar.
+- Página más ancha (hasta 1440 px) y escala un poco mayor en pantallas grandes.
+- Temporizador de sesión: en el check-in eliges cuánto vas a operar (30/45/60/90 min u otro). Se guarda en
+  `sessions.planned_minutes` y se muestra la cuenta regresiva en la barra, en la tira de disciplina y en el
+  formulario. Si no se eligió, usa la regla de duración máxima.
+- Maquetación compartida en `components/app/layout.tsx` (`Container`, `PageMain`, `PageHeader`, `Panel`) e
+  inputs con unidad (`InputGroup`, `Segmented`): todas las tarjetas y formularios usan las mismas piezas.
+
 **Técnicas**
 
 - `cacheComponents` desactivado: toda la app es autenticada y dinámica; no compensa la complejidad.

@@ -2,10 +2,12 @@ import type { Metadata } from "next";
 import { AppHeader } from "@/components/app/app-header";
 import { PageHeader, PageMain, Panel } from "@/components/app/layout";
 import { AccountsSection } from "@/components/settings/accounts-section";
+import { PsychSection } from "@/components/settings/psych-section";
 import { RulesSection } from "@/components/settings/rules-section";
 import { StrategiesSection } from "@/components/settings/strategies-section";
 import { cloudinaryConfigured } from "@/lib/cloudinary";
-import { listAccounts, listRules, listStrategies, requireUser } from "@/lib/data";
+import { getUserSettings, listAccounts, listRules, listStrategies, requireUser } from "@/lib/data";
+import { pauseSeconds } from "@/lib/psych";
 
 export const metadata: Metadata = { title: "Ajustes" };
 
@@ -14,6 +16,7 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 const SECTIONS = [
   { id: "cuentas", label: "Cuentas" },
   { id: "reglas", label: "Reglas" },
+  { id: "control-mental", label: "Control mental" },
   { id: "estrategias", label: "Estrategias" },
   { id: "capturas", label: "Capturas" },
 ];
@@ -21,10 +24,11 @@ const SECTIONS = [
 export default async function SettingsPage({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
   const { supabase, user } = await requireUser();
-  const [accounts, rules, strategies] = await Promise.all([
+  const [accounts, rules, strategies, settings] = await Promise.all([
     listAccounts(supabase),
     listRules(supabase),
     listStrategies(supabase),
+    getUserSettings(supabase),
   ]);
   const welcome = sp.bienvenida === "1" || accounts.length === 0;
   const newKind = sp.nueva === "backtest" ? "backtest" : sp.nueva === "real" ? "real" : null;
@@ -64,6 +68,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Sea
           <div className="min-w-0 space-y-10">
             <AccountsSection accounts={accounts} openNew={newKind ?? (accounts.length === 0 ? "real" : null)} />
             <RulesSection rules={rules} />
+            <PsychSection settings={settings} pauseSeconds={pauseSeconds(rules)} />
             <StrategiesSection strategies={strategies} />
 
             <Panel id="capturas" title="Capturas" description="Dónde se guardan las imágenes de tus operaciones.">

@@ -29,34 +29,71 @@ export function RHelp({ className, label = "¿Qué es R?" }: { className?: strin
   );
 }
 
-/** Traduce el resultado a palabras: cuánto ganaste o perdiste y cuántas veces tu stop. */
-export function ResultExplainer({
-  result,
-  pnl,
+/**
+ * Cómo queda tu cuenta con esta operación, paso a paso y en dólares:
+ * cuenta → entras con → arriesgas → cierras con → ganas/pierdes → cuenta queda.
+ */
+export function AccountFlow({
+  balance,
+  entry,
+  multiplier,
   stake,
+  pnl,
   currency,
 }: {
-  result: string;
-  pnl: number | null;
+  balance: number;
+  entry: number | null;
+  multiplier: number | null;
   stake: number;
+  pnl: number | null;
   currency: string;
 }) {
-  if (!result || pnl === null || !Number.isFinite(pnl) || !(stake > 0)) return null;
-  const r = pnl / stake;
-  const rText = `${r > 0 ? "+" : r < 0 ? "−" : ""}${Math.abs(r).toFixed(2)}R`;
-  const tone = pnl > 0 ? "border-gain/30 bg-gain/10" : pnl < 0 ? "border-loss/30 bg-loss/10" : "bg-muted/40";
-  const sentence =
-    pnl > 0
-      ? `Ganaste ${money(pnl, currency)}: ${Math.abs(r).toFixed(1)} veces lo que arriesgabas (${money(stake, currency)}).`
-      : pnl < 0
-        ? Math.abs(r) > 1.001
-          ? `Perdiste ${money(-pnl, currency)}: más que tu stop de ${money(stake, currency)}. Revisa si lo moviste.`
-          : `Perdiste ${money(-pnl, currency)}${Math.abs(r) > 0.999 ? ", tu stop completo" : `, ${(Math.abs(r) * 100).toFixed(0)}% de tu stop`}.`
-        : "Empate: ni ganaste ni perdiste.";
+  const hasPnl = pnl !== null && Number.isFinite(pnl);
+  const r = hasPnl && stake > 0 ? pnl / stake : null;
+  const steps: { label: string; value: string; tone?: string }[] = [];
+  if (balance > 0) steps.push({ label: "Tu cuenta", value: money(balance, currency) });
+  if (entry !== null) {
+    steps.push({ label: "Entras con", value: `${money(entry, currency)}${multiplier && Number.isFinite(multiplier) ? ` ×${multiplier}` : ""}` });
+  }
+  if (stake > 0) steps.push({ label: "Arriesgas", value: money(stake, currency) });
+  if (hasPnl && entry !== null) steps.push({ label: "Cierra en", value: money(entry + pnl, currency) });
+  if (hasPnl) {
+    steps.push({
+      label: pnl >= 0 ? "Ganas" : "Pierdes",
+      value: `${pnl > 0 ? "+" : pnl < 0 ? "−" : ""}${money(Math.abs(pnl), currency)}`,
+      tone: pnl > 0 ? "text-gain" : pnl < 0 ? "text-loss" : undefined,
+    });
+    if (balance > 0) steps.push({ label: "Tu cuenta queda", value: money(balance + pnl, currency), tone: "text-foreground" });
+  }
+  if (steps.length < 2) return null;
+
   return (
-    <div className={cn("mt-3 flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5", tone)}>
-      <p className="text-sm">{sentence}</p>
-      <span className={cn("num shrink-0 text-lg font-semibold", pnl > 0 ? "text-gain" : pnl < 0 ? "text-loss" : "")}>{rText}</span>
+    <div className="mt-4 rounded-lg border bg-muted/20 p-3">
+      <ol className="flex flex-wrap items-stretch gap-1.5">
+        {steps.map((s, i) => (
+          <li key={s.label} className="flex items-center gap-1.5">
+            {i > 0 && <span className="text-subtle">→</span>}
+            <span className="rounded-md bg-background/60 px-2 py-1">
+              <span className="block text-[10px] text-subtle">{s.label}</span>
+              <span className={cn("num block text-sm font-semibold", s.tone)}>{s.value}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+      {r !== null && hasPnl && (
+        <p className="mt-2 text-sm text-muted-foreground">
+          {pnl > 0
+            ? `Ganaste ${(r).toFixed(1)} veces lo que arriesgabas: `
+            : pnl < 0
+              ? Math.abs(r) > 1.001
+                ? "Perdiste más que tu stop: revisa si lo moviste. "
+                : "Perdiste lo que arriesgabas: "
+              : "Empate: "}
+          <span className={cn("num font-semibold", pnl > 0 ? "text-gain" : pnl < 0 ? "text-loss" : "")}>
+            {`${r > 0 ? "+" : r < 0 ? "−" : ""}${Math.abs(r).toFixed(2)}R`}
+          </span>
+        </p>
+      )}
     </div>
   );
 }

@@ -25,7 +25,7 @@ import { fromLocalInput } from "@/lib/local-input";
 import { evaluateTrade, type EngineTrade, type Rule } from "@/lib/rules";
 import { tradeInputSchema, type TradeInput } from "@/lib/schemas";
 import { localDate } from "@/lib/time-core";
-import { ResultExplainer, RHelp } from "./r-help";
+import { AccountFlow, RHelp } from "./r-help";
 import { SessionTimerChip, useSessionClock } from "./session-timer";
 
 export interface TradeFormValues {
@@ -48,6 +48,8 @@ export interface TradeFormValues {
   /** Monto de entrada con multiplicador. */
   entry_amount: string;
   multiplier: string;
+  /** Con cuánto cerró la operación. No se guarda: sirve para calcular la ganancia. */
+  close_value?: string;
 }
 
 function parseNumber(value: string): number | null {
@@ -155,7 +157,7 @@ export function TradeForm({
     defaultValues: initial,
     mode: "onSubmit",
   });
-  const { control, register, handleSubmit, setValue, formState } = form;
+  const { control, register, handleSubmit, setValue, getValues, formState } = form;
   const values = useWatch({ control });
   const [file, setFile] = useState<Blob | null>(initialFile);
   const [preview, setPreview] = useState<string | null>(null);
@@ -212,6 +214,28 @@ export function TradeForm({
     });
     return { ...engine, tilt };
   }, [editing, values, stakeNumber, tpNumber, signedPnl, mode, sessionTrades, sessionOpenedAt, balance, rules, psych.tilt_detector]);
+
+  const entryNumber = parseNumber(values.entry_amount ?? "") ?? Number.NaN;
+
+  /** Escribiste con cuánto cerró: ganancia = cierre − entrada, y el resultado sale solo. */
+  function syncFromClose(raw: string) {
+    const close = parseNumber(raw);
+    const entry = parseNumber(getValues("entry_amount") ?? "");
+    if (close === null || !Number.isFinite(close) || entry === null || !(entry > 0)) return;
+    const diff = Math.round((close - entry) * 100) / 100;
+    setValue("result", diff > 0 ? "win" : diff < 0 ? "loss" : "tie", { shouldValidate: formState.isSubmitted });
+    setValue("pnl", diff === 0 ? "" : String(Math.abs(diff)));
+  }
+
+  /** Escribiste cuánto ganaste o perdiste: se calcula con cuánto cerró. */
+  function syncFromProfit(raw: string) {
+    const amount = parseNumber(raw);
+    const entry = parseNumber(getValues("entry_amount") ?? "");
+    const result = getValues("result");
+    if (amount === null || !Number.isFinite(amount) || entry === null || !(entry > 0) || !result || result === "tie") return;
+    const close = entry + (result === "win" ? Math.abs(amount) : -Math.abs(amount));
+    setValue("close_value", String(Math.round(close * 100) / 100));
+  }
 
   const submit = handleSubmit((payload) => onSubmit(payload, file));
   const submitted = formState.isSubmitted;
@@ -368,8 +392,17 @@ export function TradeForm({
         <FormSection step={3} title="Montos" hint={<RHelp />}>
           <div className="grid gap-3 sm:grid-cols-3">
             <label className="block space-y-1.5">
-              <span className="block text-sm text-muted-foreground">Inversión (entrada)</span>
-              <InputGroup prefix="$" {...register("entry_amount")} inputMode="decimal" autoComplete="off" placeholder="10" className="h-11" aria-invalid={Boolean(errors.entry_amount)} />
+              <span className="block text-sm text-muted-foreground">Con cuánto entraste</span>
+              <InputGroup
+                prefix="$"
+                {...register("entry_amount", { onChange: () => syncFromClose(values.close_value ?? "") })}
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder="10"
+                className="h-11"
+                aria-invalid={Boolean(errors.entry_amount)}
+              />
+              {balance > 0 && <span className="num block text-xs text-subtle">De tu cuenta de {money(balance, currency)}</span>}
               <FieldError message={errors.entry_amount?.message} />
             </label>
             <label className="block space-y-1.5">
@@ -378,38 +411,60 @@ export function TradeForm({
               <FieldError message={errors.multiplier?.message} />
             </label>
             <label className="block space-y-1.5">
-              <span className="block text-sm text-muted-foreground">Stop (lo que aceptas perder)</span>
+              <span className="block text-sm text-muted-foreground">Stop: lo máximo que aceptas perder</span>
               <InputGroup prefix="$" {...register("stake")} inputMode="decimal" autoComplete="off" className="h-11" aria-invalid={Boolean(errors.stake)} />
               {riskHint && <span className="num block text-xs text-subtle">{riskHint}</span>}
               <FieldError message={errors.stake?.message} />
             </label>
           </div>
 
-          {values.result === "win" || values.result === "loss" ? (
-            <label className="mt-4 block space-y-1.5">
-              <span className="block text-sm font-medium">
-                {values.result === "win" ? "¿Cuánto ganaste con el spike?" : "¿Cuánto perdiste?"}
-              </span>
+          {/* Cierre ⇄ ganancia: escribes uno, el otro se calcula */}
+          <div className="mt-4 grid items-start gap-3 sm:grid-cols-[1fr_auto_1fr]">
+            <label className="block space-y-1.5">
+              <span className="block text-sm font-medium">¿Con cuánto cerró la operación?</span>
               <InputGroup
-                prefix={values.result === "win" ? "+$" : "−$"}
-                {...register("pnl")}
+                prefix="$"
+                {...register("close_value", { onChange: (e) => syncFromClose(e.target.value) })}
                 inputMode="decimal"
                 autoComplete="off"
+                placeholder={entryNumber > 0 ? `Ej.: ${(entryNumber * 1.5).toFixed(2)}` : "Pon primero con cuánto entraste"}
+                disabled={!(entryNumber > 0)}
+                className="h-12"
+                inputClassName="text-lg"
+              />
+              <span className="block text-xs text-subtle">Lo que muestra Deriv al cerrar. Decide solo si ganaste o perdiste.</span>
+            </label>
+            <span className="hidden pt-9 text-sm text-subtle sm:block">o</span>
+            <label className="block space-y-1.5">
+              <span className="block text-sm font-medium">
+                {values.result === "loss" ? "¿Cuánto perdiste?" : values.result === "tie" ? "Empate" : "¿Cuánto ganaste?"}
+              </span>
+              <InputGroup
+                prefix={values.result === "loss" ? "−$" : values.result === "win" ? "+$" : "$"}
+                {...register("pnl", { onChange: (e) => syncFromProfit(e.target.value) })}
+                inputMode="decimal"
+                autoComplete="off"
+                disabled={values.result === "tie"}
                 placeholder={values.result === "loss" && stakeNumber > 0 ? String(stakeNumber) : "0.00"}
-                className={cn("h-12 text-lg", values.result === "win" ? "border-gain/50" : "border-loss/40")}
+                className={cn("h-12", values.result === "win" && "border-gain/50", values.result === "loss" && "border-loss/40")}
                 inputClassName="text-lg"
                 aria-invalid={Boolean(errors.pnl)}
               />
               <span className="block text-xs text-subtle">
-                {values.result === "win"
-                  ? "Escribe lo que te pagó el spike, aunque no haya llegado a ningún TP."
-                  : "Si lo dejas vacío, cuenta tu stop completo."}
+                {values.result === "loss" ? "Vacío = perdiste tu stop completo." : "Solo la ganancia, sin lo que invertiste."}
               </span>
               <FieldError message={errors.pnl?.message} />
             </label>
-          ) : null}
+          </div>
 
-          <ResultExplainer result={values.result ?? ""} pnl={signedPnl} stake={stakeNumber} currency={currency} />
+          <AccountFlow
+            balance={balance}
+            entry={entryNumber > 0 ? entryNumber : null}
+            multiplier={parseNumber(values.multiplier ?? "")}
+            stake={stakeNumber}
+            pnl={values.result ? signedPnl : null}
+            currency={currency}
+          />
         </FormSection>
 
         {/* 4 · Estado y estrategia */}

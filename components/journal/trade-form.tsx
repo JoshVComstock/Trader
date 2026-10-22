@@ -180,9 +180,7 @@ export function TradeForm({
       ? typedPnl
       : values.result === "loss" && stakeNumber > 0
         ? -stakeNumber
-        : values.result === "win" && tpNumber !== null && Number.isFinite(tpNumber)
-          ? tpNumber
-          : null;
+        : null;
   const withSpike =
     values.instrument && values.direction ? isWithSpike(values.instrument, values.direction) : null;
 

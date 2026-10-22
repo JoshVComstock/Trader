@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeftIcon, ChevronRightIcon, HourglassIcon, PlusIcon } from "lucide-react";
+import { CameraIcon, ChevronLeftIcon, ChevronRightIcon, HourglassIcon, PictureInPicture2Icon, PlusIcon } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AppHeader } from "@/components/app/app-header";
 import { Button } from "@/components/ui/button";
@@ -110,6 +110,7 @@ function JournalToolbar({
 
       <div className="ml-auto flex items-center gap-2">
         {sessionClock && sessionClock.running && <SessionTimerChip clock={sessionClock} />}
+        <CoachButtons />
         <RegisterButton className="hidden sm:inline-flex" />
       </div>
     </>
@@ -149,5 +150,28 @@ export function RegisterFab() {
       {pause.active ? <HourglassIcon className="size-5" /> : <PlusIcon className="size-5" />}
       {pause.active ? <span className="num">Pausa {clock(pause.remainingSec)}</span> : "Registrar"}
     </Button>
+  );
+}
+
+/** Ventana flotante de la estrategia y captura de pantalla con dibujo. */
+function CoachButtons() {
+  const { openCoach, coachOpen, captureFrom } = useJournal();
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="lg"
+        onClick={openCoach}
+        title="Tu estrategia en una ventana que queda encima, aunque minimices el navegador"
+        className={coachOpen ? "border-brand/50" : undefined}
+      >
+        <PictureInPicture2Icon />
+        <span className="hidden lg:inline">Ventana flotante</span>
+      </Button>
+      <Button variant="outline" size="lg" onClick={() => captureFrom()} title="Capturar la pantalla y dibujar encima">
+        <CameraIcon />
+        <span className="hidden lg:inline">Capturar</span>
+      </Button>
+    </>
   );
 }

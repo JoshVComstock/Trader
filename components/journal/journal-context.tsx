@@ -21,7 +21,11 @@ import { defaultChecklist } from "@/lib/domain/checklist";
 import { getInstrument } from "@/lib/domain/instruments";
 import type { JournalMode } from "@/lib/domain/types";
 import type { Account, CalmMessage, JournalTrade, Observation, Session, Strategy, WeeklyReview } from "@/lib/data";
-import { toLocalInput } from "@/lib/format";
+import { signedMoney, timeShort, toLocalInput } from "@/lib/format";
+import { instrumentLabel } from "@/lib/domain/instruments";
+import { AnnotatorDialog } from "../float/annotator";
+import { captureScreen, pendingCapture } from "../float/capture";
+import { FloatingCoach, openCoachHost, supportsPip, type CoachHost } from "../float/floating-coach";
 import type { EngineTrade, Rule } from "@/lib/rules";
 import type { TradeInput } from "@/lib/schemas";
 import { pauseState } from "@/lib/psych";
@@ -71,6 +75,11 @@ interface JournalContextValue {
   discardPending: (id: string) => void;
   openCheckin: () => void;
   openCloseSession: () => void;
+  /** Abre (o enfoca) la ventana flotante de la estrategia. Llamar dentro de un clic. */
+  openCoach: () => void;
+  coachOpen: boolean;
+  /** Captura la pantalla y abre el editor de dibujo. */
+  captureFrom: (win?: Window) => void;
 }
 
 const JournalContext = createContext<JournalContextValue | null>(null);
@@ -153,7 +162,8 @@ function newTradeValues(
     stake: numberString(stake),
     strategy_id: strategy,
     mood,
-    tp: numberString(prev?.tp ?? stake * 2),
+    // Con multiplicadores el spike paga lo que paga: el TP no se arrastra de la anterior.
+    tp: "",
     pnl: "",
     opened_at: openedAt,
     closed_at: "",
@@ -254,6 +264,14 @@ export function JournalProvider({ data, children }: { data: JournalClientData; c
   );
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [formValues, setFormValues] = useState<TradeFormValues | null>(null);
+  /** Foto para el formulario que se abre (una captura dibujada en la ventana flotante). */
+  const [formFile, setFormFile] = useState<Blob | null>(null);
+  const [coachHost, setCoachHost] = useState<CoachHost | null>(null);
+  const [captureImage, setCaptureImage] = useState<Blob | null>(null);
+  const openForm = useCallback((values: TradeFormValues) => {
+    setFormFile(pendingCapture.take());
+    setFormValues(values);
+  }, []);
   const [checkinOpen, setCheckinOpen] = useState(false);
   /** Si el check-in se abrió al querer registrar, al terminar se abre el formulario. */
   const [tradeAfterCheckin, setTradeAfterCheckin] = useState(false);
@@ -322,8 +340,8 @@ export function JournalProvider({ data, children }: { data: JournalClientData; c
       }
     }
     const lastPending = pendingStore.get().filter((p) => p.payload.account_id === data.account.id).at(-1)?.payload ?? null;
-    setFormValues(newTradeValues(data, lastPending));
-  }, [data, liveTrades]);
+    openForm(newTradeValues(data, lastPending));
+  }, [data, liveTrades, openForm]);
 
   const value = useMemo<JournalContextValue>(
     () => ({
@@ -348,8 +366,38 @@ export function JournalProvider({ data, children }: { data: JournalClientData; c
         setCheckinOpen(true);
       },
       openCloseSession: () => setCloseOpen(true),
+      coachOpen: coachHost !== null,
+      openCoach: () => {
+        if (coachHost?.kind === "pip") {
+          coachHost.win.focus();
+          return;
+        }
+        void openCoachHost().then((host) => {
+          setCoachHost(host);
+          if (host.kind === "inline") {
+            toast.info("Ventana flotante dentro de la página", {
+              description: supportsPip()
+                ? "Para que quede encima aunque minimices el navegador, ábrela con un clic en Chrome o Edge de computadora."
+                : "Tu navegador no permite ventanas siempre encima. En Chrome o Edge de computadora sí.",
+            });
+          }
+        });
+      },
+      captureFrom: (win) => {
+        captureScreen(win ?? window).then(
+          (blob) => {
+            setCaptureImage(blob);
+            window.focus();
+          },
+          (e: unknown) => {
+            // Cancelar el selector de pantalla no es un error.
+            if (e instanceof DOMException && e.name === "NotAllowedError") return;
+            toast.error(e instanceof Error ? e.message : "No pudimos capturar la pantalla");
+          },
+        );
+      },
     }),
-    [data, pending, liveTrades, calmMessage, selectedDay, startTrade, submit],
+    [data, pending, liveTrades, calmMessage, selectedDay, startTrade, submit, coachHost],
   );
 
   const sessionContext = useCallback(
@@ -382,6 +430,7 @@ export function JournalProvider({ data, children }: { data: JournalClientData; c
       session={data.mode === "live" ? data.session : null}
       psych={data.settings.psych}
       observations={data.observations}
+      initialFile={formFile}
       onCancel={close}
       onSubmit={(payload, file) => {
         close();
@@ -418,6 +467,40 @@ export function JournalProvider({ data, children }: { data: JournalClientData; c
         </Sheet>
       )}
 
+      {coachHost && (
+        <FloatingCoach
+          host={coachHost}
+          onClose={() => {
+            if (coachHost.kind === "pip") coachHost.win.close();
+            setCoachHost(null);
+          }}
+          onCapture={(win) => value.captureFrom(win)}
+          captureReady={captureImage !== null}
+        />
+      )}
+
+      <AnnotatorDialog
+        image={captureImage}
+        onClose={() => setCaptureImage(null)}
+        onAttachNext={(blob) => {
+          pendingCapture.set(blob);
+          toast.success("Captura lista", { description: "Se adjunta sola a la próxima operación que registres." });
+        }}
+        attachTargets={(data.mode === "live" ? data.sessionTrades : data.trades.slice(0, 15)).map((t) => ({
+          id: t.id,
+          label: `${timeShort(t.opened_at)} · ${instrumentLabel(t.instrument)} · ${signedMoney(t.pnl, data.account.currency)}`,
+        }))}
+        onAttachTo={async (tradeId, blob) => {
+          try {
+            await uploadScreenshot(tradeId, blob);
+            toast.success("Captura adjuntada");
+            router.refresh();
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : "No pudimos subir la captura");
+          }
+        }}
+      />
+
       <CheckinDialog
         open={checkinOpen}
         onOpenChange={setCheckinOpen}
@@ -429,7 +512,7 @@ export function JournalProvider({ data, children }: { data: JournalClientData; c
           router.refresh();
           if (tradeAfterCheckin) {
             setTradeAfterCheckin(false);
-            setFormValues(newTradeValues(data, null, mood));
+            openForm(newTradeValues(data, null, mood));
           }
         }}
       />

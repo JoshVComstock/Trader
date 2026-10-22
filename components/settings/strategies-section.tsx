@@ -14,7 +14,7 @@ import type { Strategy } from "@/lib/data";
 import { strategySchema, type StrategyInput } from "@/lib/schemas";
 import { SectionHeading } from "./section-heading";
 
-const EMPTY: StrategyInput = { name: "", context_tf: "1H", entry_tf: "1M", notes: null, active: true };
+const EMPTY: StrategyInput = { name: "", context_tf: "1H", entry_tf: "1M", notes: null, active: true, steps: [] };
 
 export function StrategiesSection({ strategies }: { strategies: Strategy[] }) {
   const [editing, setEditing] = useState<StrategyInput | null>(null);

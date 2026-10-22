@@ -3,7 +3,7 @@
 import { CalendarCheckIcon, DownloadIcon, FlaskConicalIcon, LogOutIcon, MenuIcon, MoonIcon, NotebookPenIcon, SettingsIcon, SunIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useTheme } from "next-themes";
+import { useTheme } from "@/hooks/use-theme";
 import { useState, type ReactNode } from "react";
 import { signOut } from "@/app/actions/auth";
 import { Container } from "@/components/app/layout";

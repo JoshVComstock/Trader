@@ -45,6 +45,8 @@ export const tradeInputSchema = z
     closed_at: isoDate.nullable(),
     note: z.string().trim().max(4000, "Máximo 4000 caracteres").nullable(),
     checklist: checklistSchema,
+    /** Ansiedad / ganas de recuperar, 1–5. Opcional: se puede apagar en Ajustes. */
+    anxiety: z.number().int().min(1).max(5).nullable().default(null),
   })
   .superRefine((v, ctx) => {
     if (v.pnl !== null) {
@@ -77,6 +79,7 @@ export const checkinSchema = z.object({
   mood_before: moodSchema,
   read_rules: z.boolean(),
   goal_r: z.number().finite().min(-100).max(100).nullable(),
+  planned_minutes: z.number().int().min(5, "Mínimo 5 minutos").max(600, "Máximo 10 horas").nullable(),
 });
 export type CheckinInput = z.infer<typeof checkinSchema>;
 
@@ -94,7 +97,8 @@ export const accountSchema = z.object({
   id: z.uuid().optional(),
   label: z.string().trim().min(1, "Ponle un nombre").max(60),
   kind: z.enum(["real", "demo", "backtest"]),
-  currency: z.string().trim().length(3, "Código de 3 letras").toUpperCase(),
+  // Por ahora todas las cuentas van en dólares.
+  currency: z.literal("USD").default("USD"),
   start_balance: money.min(0, "No puede ser negativo"),
 });
 export type AccountInput = z.infer<typeof accountSchema>;
@@ -147,6 +151,27 @@ export function parseRules(
   }
   return out;
 }
+
+export const userSettingsSchema = z.object({
+  psych: z.record(z.string(), z.boolean()),
+  pause_phrase: z.string().trim().max(280, "Máximo 280 caracteres").nullable(),
+});
+
+export const weeklyReviewSchema = z.object({
+  week_start: z.iso.date(),
+  answer: z.string().trim().min(1, "Escribe qué vas a cambiar").max(2000),
+});
+
+export const observationSchema = z.object({
+  id: z.uuid().optional(),
+  account_id: z.uuid().nullable(),
+  instrument: instrumentSchema.nullable(),
+  kind: z.enum(["zona", "patron", "nota"]),
+  level: z.number().finite().positive("Precio inválido").nullable(),
+  timeframe: z.string().trim().max(10).nullable(),
+  note: z.string().trim().min(1, "Describe lo que viste").max(1000),
+});
+export type ObservationInput = z.infer<typeof observationSchema>;
 
 export const noteSchema = z.object({
   trade_id: z.uuid(),

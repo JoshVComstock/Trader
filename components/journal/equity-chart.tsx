@@ -1,6 +1,7 @@
 "use client";
 
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Panel } from "@/components/app/layout";
 import type { EquityPoint } from "@/lib/calc/metrics";
 import { inLaPaz, money } from "@/lib/format";
 
@@ -37,9 +38,11 @@ function TooltipBox({
 export function EquityChart({ points, currency }: { points: EquityPoint[]; currency: string }) {
   if (points.length < 2) {
     return (
-      <section aria-label="Curva de capital" className="flex h-56 items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">
-        Registra tu primera operación del mes para ver tu curva.
-      </section>
+      <Panel title="Curva de capital" className="border-dashed bg-transparent">
+        <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
+          Registra tu primera operación del mes para ver tu curva.
+        </div>
+      </Panel>
     );
   }
 
@@ -51,15 +54,17 @@ export function EquityChart({ points, currency }: { points: EquityPoint[]; curre
   const pad = Math.max((hi - lo) * 0.12, 1);
 
   return (
-    <section aria-label="Curva de capital y drawdown" className="rounded-xl border bg-card px-2 pt-4 pb-2">
-      <div className="flex items-baseline justify-between px-3">
-        <h2 className="text-sm font-medium">Curva de capital</h2>
-        <p className="num text-xs text-subtle">
+    <Panel
+      title="Curva de capital"
+      description="Arriba el balance; abajo, cuánto estás por debajo de tu máximo."
+      actions={
+        <p className="num text-sm text-subtle">
           Máx. drawdown <span className={minDd < 0 ? "text-loss" : undefined}>{money(minDd, currency)}</span>
         </p>
-      </div>
-
-      <div className="h-48 sm:h-56">
+      }
+      bodyClassName="px-1 sm:px-2"
+    >
+      <div className="h-56 sm:h-72">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={points} syncId="equity" margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
             <defs>
@@ -96,7 +101,7 @@ export function EquityChart({ points, currency }: { points: EquityPoint[]; curre
         </ResponsiveContainer>
       </div>
 
-      <div className="h-20 sm:h-24">
+      <div className="h-24 sm:h-28">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={points} syncId="equity" margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
             <CartesianGrid vertical={false} stroke="var(--chart-grid)" />
@@ -135,6 +140,6 @@ export function EquityChart({ points, currency }: { points: EquityPoint[]; curre
           </AreaChart>
         </ResponsiveContainer>
       </div>
-    </section>
+    </Panel>
   );
 }

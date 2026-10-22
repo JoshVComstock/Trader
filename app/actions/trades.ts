@@ -167,6 +167,7 @@ export async function createTrade(raw: unknown): Promise<ActionResult<CreateTrad
     mood: input.mood,
     checklist: input.checklist,
     note: input.note || null,
+    anxiety: input.anxiety,
     ...derived,
   });
   if (inserted.error) {
@@ -232,6 +233,7 @@ export async function updateTrade(raw: unknown): Promise<ActionResult<{ tradeId:
       mood: input.mood,
       checklist: input.checklist,
       note: input.note || null,
+      anxiety: input.anxiety,
       ...deriveTrade({
         instrument: input.instrument,
         direction: input.direction,

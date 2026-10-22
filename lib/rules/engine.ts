@@ -9,15 +9,14 @@ import type {
   Violation,
 } from "./types";
 
-const money = new Intl.NumberFormat("es-BO", {
+const money = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
-  currencyDisplay: "narrowSymbol",
   minimumFractionDigits: 0,
   maximumFractionDigits: 2,
 });
 
-const pct = new Intl.NumberFormat("es-BO", { maximumFractionDigits: 1 });
+const pct = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
 
 const STOP = "lo decidiste tú cuando estabas tranquilo.";
 
@@ -106,7 +105,7 @@ const checks: { [T in Rule["type"]]: Check<T> } = {
     // Tolerancia de redondeo: 2 % de 100 tiene que ser exactamente 2.
     if (risk > rule.params.pct + 1e-9) {
       return {
-        violation: `Arriesgaste el ${pct.format(risk)} % de la cuenta y tu tope es ${pct.format(rule.params.pct)} %.`,
+        violation: `Arriesgaste el ${pct.format(risk)}% de la cuenta y tu tope es ${pct.format(rule.params.pct)}%.`,
       };
     }
     return {};

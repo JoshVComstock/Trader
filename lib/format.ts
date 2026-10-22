@@ -2,7 +2,7 @@ import { es } from "date-fns/locale";
 import { formatInTimeZone } from "date-fns-tz";
 import { TIME_ZONE } from "@/lib/time-core";
 
-const LOCALE = "es-BO";
+const LOCALE = "en-US";
 
 const moneyFormatters = new Map<string, Intl.NumberFormat>();
 function moneyFormatter(currency: string, decimals: number) {
@@ -12,7 +12,6 @@ function moneyFormatter(currency: string, decimals: number) {
     f = new Intl.NumberFormat(LOCALE, {
       style: "currency",
       currency,
-      currencyDisplay: "narrowSymbol",
       minimumFractionDigits: decimals,
       maximumFractionDigits: decimals,
     });
@@ -25,7 +24,7 @@ export function money(value: number, currency = "USD", decimals = 2): string {
   return moneyFormatter(currency, decimals).format(value);
 }
 
-/** Con signo explícito: +$2,00 / −$1,00. */
+/** Con signo explícito: +$2.00 / −$1.00. */
 export function signedMoney(value: number, currency = "USD"): string {
   if (value === 0) return money(0, currency);
   const abs = money(Math.abs(value), currency);
@@ -35,7 +34,7 @@ export function signedMoney(value: number, currency = "USD"): string {
 const rFormat = new Intl.NumberFormat(LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export function rValue(value: number): string {
-  if (value === 0) return "0,00R";
+  if (value === 0) return "0.00R";
   const abs = rFormat.format(Math.abs(value));
   return `${value > 0 ? "+" : "−"}${abs}R`;
 }
@@ -43,7 +42,7 @@ export function rValue(value: number): string {
 const pctFormat = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 });
 
 export function percent(ratio: number | null): string {
-  return ratio === null ? "—" : `${pctFormat.format(ratio * 100)} %`;
+  return ratio === null ? "—" : `${pctFormat.format(ratio * 100)}%`;
 }
 
 const decimalFormat = new Intl.NumberFormat(LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -54,11 +53,12 @@ export function decimal(value: number | null): string {
   return decimalFormat.format(value);
 }
 
+/** Dólares compactos para celdas chicas: +$2.00, −$1.5k. */
 export function compactMoney(value: number): string {
   const abs = Math.abs(value);
-  const s = abs >= 1000 ? `${(abs / 1000).toFixed(1).replace(".", ",")}k` : abs.toFixed(abs >= 100 ? 0 : 2).replace(".", ",");
-  if (value === 0) return "0";
-  return `${value > 0 ? "+" : "−"}${s}`;
+  const s = abs >= 1000 ? `${(abs / 1000).toFixed(1)}k` : abs.toFixed(abs >= 100 ? 0 : 2);
+  if (value === 0) return "$0";
+  return `${value > 0 ? "+" : "−"}$${s}`;
 }
 
 /** Fecha/hora en La Paz con un patrón de date-fns. */

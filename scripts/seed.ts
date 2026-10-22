@@ -171,6 +171,7 @@ async function seedAccount(opts: {
         pnl,
         mood,
         checklist,
+        anxiety: accelerated ? 4 + Math.floor(rand() * 2) : 1 + Math.floor(rand() * 3),
         note: chance(0.25)
           ? pick([
               "Spike limpio en la zona de 1H, reacción inmediata.",
@@ -282,6 +283,14 @@ async function main() {
     dates: backtestDates,
     strategyId: strategy?.id ?? null,
   });
+
+  await db.from("observations").delete().eq("user_id", userId);
+  const { data: bt } = await db.from("accounts").select("id").eq("user_id", userId).eq("label", BACKTEST_LABEL).single();
+  await db.from("observations").insert([
+    { user_id: userId, account_id: bt?.id ?? null, instrument: "BOOM1000", kind: "zona", level: 12850.5, timeframe: "1H", note: "Soporte que reaccionó tres veces con spike inmediato.", times_seen: 3 },
+    { user_id: userId, account_id: bt?.id ?? null, instrument: "CRASH500", kind: "patron", timeframe: "1M", note: "Después de dos spikes seguidos, el tercero casi nunca llega a la zona.", times_seen: 2 },
+    { user_id: userId, account_id: bt?.id ?? null, instrument: "BOOM500", kind: "zona", level: 4321.25, timeframe: "1H", note: "Resistencia: los spikes se frenan aquí.", times_seen: 1 },
+  ]);
 
   console.log(
     `Real: ${real.sessions} sesiones, ${real.trades} operaciones, ${real.blocked} bloqueadas, balance final $${real.balance.toFixed(2)}`,

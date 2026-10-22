@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { zodFieldErrors } from "@/lib/action-result";
 import type { Strategy } from "@/lib/data";
 import { strategySchema, type StrategyInput } from "@/lib/schemas";
+import { SectionHeading } from "./section-heading";
 
 const EMPTY: StrategyInput = { name: "", context_tf: "1H", entry_tf: "1M", notes: null, active: true };
 
@@ -19,28 +20,28 @@ export function StrategiesSection({ strategies }: { strategies: Strategy[] }) {
   const [editing, setEditing] = useState<StrategyInput | null>(null);
 
   return (
-    <section id="estrategias" className="scroll-mt-20 space-y-3">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold">Estrategias</h2>
-          <p className="text-sm text-muted-foreground">Las activas aparecen en el formulario de registro.</p>
-        </div>
-        {!editing && (
-          <Button variant="outline" size="sm" onClick={() => setEditing(EMPTY)}>
-            <PlusIcon />
-            Nueva
-          </Button>
-        )}
-      </div>
+    <section id="estrategias" className="scroll-mt-32">
+      <SectionHeading
+        title="Estrategias"
+        description="Las activas aparecen en el formulario de registro para etiquetar cada operación."
+        action={
+          !editing && (
+            <Button variant="outline" onClick={() => setEditing(EMPTY)}>
+              <PlusIcon />
+              Nueva estrategia
+            </Button>
+          )
+        }
+      />
 
-      <ul className="divide-y rounded-xl border bg-card">
+      <ul className="divide-y overflow-hidden rounded-xl border bg-card">
         {strategies.map((s) =>
           editing?.id === s.id ? (
-            <li key={s.id} className="p-4">
+            <li key={s.id} className="p-5">
               <StrategyForm initial={editing} onDone={() => setEditing(null)} />
             </li>
           ) : (
-            <li key={s.id} className="flex items-center justify-between gap-3 px-4 py-3">
+            <li key={s.id} className="flex items-center justify-between gap-3 px-5 py-4">
               <div className="min-w-0">
                 <p className={s.active ? "truncate font-medium" : "truncate font-medium text-muted-foreground"}>{s.name}</p>
                 <p className="text-xs text-muted-foreground">
@@ -55,12 +56,12 @@ export function StrategiesSection({ strategies }: { strategies: Strategy[] }) {
           ),
         )}
         {editing && !editing.id && (
-          <li className="p-4">
+          <li className="p-5">
             <StrategyForm initial={editing} onDone={() => setEditing(null)} />
           </li>
         )}
         {strategies.length === 0 && !editing && (
-          <li className="px-4 py-4 text-sm text-muted-foreground">Crea una estrategia para etiquetar tus operaciones.</li>
+          <li className="px-5 py-5 text-sm text-muted-foreground">Crea una estrategia para etiquetar tus operaciones.</li>
         )}
       </ul>
     </section>

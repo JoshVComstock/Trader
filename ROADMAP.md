@@ -14,6 +14,42 @@
   propia página `/backtesting`. Cada operación lleva fecha y hora obligatorias; la sesión se crea sola por día
   de la operación (sin check-in), con las mismas reglas, bloqueo y métricas. No hay replay ni gráficos de velas.
 
+**Segunda ronda de ajustes (21 oct)**
+
+- Todo el dinero en dólares con formato `$1,234.50`. Las cuentas son siempre USD (el campo de moneda ya no se
+  edita; la columna sigue en la base por si algún día hace falta).
+- Cabecera nueva: navegación completa en escritorio (Bitácora, Backtesting, Ajustes, Exportar, tema, salir);
+  hamburguesa con panel lateral solo en móvil. En el journal, una segunda fila con cuenta, mes, temporizador y
+  el botón de registrar.
+- Página más ancha (hasta 1440 px) y escala un poco mayor en pantallas grandes.
+- Temporizador de sesión: en el check-in eliges cuánto vas a operar (30/45/60/90 min u otro). Se guarda en
+  `sessions.planned_minutes` y se muestra la cuenta regresiva en la barra, en la tira de disciplina y en el
+  formulario. Si no se eligió, usa la regla de duración máxima.
+- Maquetación compartida en `components/app/layout.tsx` (`Container`, `PageMain`, `PageHeader`, `Panel`) e
+  inputs con unidad (`InputGroup`, `Segmented`): todas las tarjetas y formularios usan las mismas piezas.
+
+**Control mental (21 oct)**
+
+- Todo se puede apagar en Ajustes → Control mental (tabla `user_settings`, jsonb `psych`). Lo apagado
+  desaparece de la bitácora, del formulario y del check-in.
+- Pausa después de una pérdida: dura lo que diga la regla "Pausa mínima entre operaciones" y se cuenta desde
+  el cierre de la pérdida. Si esa regla está apagada, no hay pausa. Es una pausa de la interfaz (el botón
+  Registrar se bloquea); el servidor sigue registrando la violación de la regla como antes.
+- Ansiedad 1–5 por operación (`trades.anxiety`), cruzada con R en la tarjeta "Tú acelerado vs tú tranquilo".
+- Tu yo tranquilo: reflexiones de cierre de días con "seguí el plan = sí". Se muestra una por día cuando
+  estás bloqueado, en pausa o cerca de un límite.
+- Racha de disciplina: días operados seguidos sin violaciones (los días sin operar no cortan). Llegar a un
+  límite y bloquear la sesión cuenta como respetar la regla.
+- Detector de tilt: en una ventana de 10 minutos, pérdida + stake mayor + contra el spike = tilt; pérdida + una
+  de las otras = riesgo. Solo avisa en el formulario, no bloquea.
+- Revisión semanal (`/revision`, tabla `weekly_reviews`): aviso los domingos, filtros por cuenta, índice,
+  spike, estrategia, estado, resultado y plan. La respuesta aparece en el check-in de la semana siguiente.
+- Observaciones de backtesting (tabla `observations`): zonas, patrones y notas con "Se repitió". Las de un
+  índice aparecen en el formulario de registro al elegirlo, también en real.
+- Recordatorios: notificaciones locales (5 min antes y al terminar la sesión, inicio del horario permitido).
+  Llegan con la app abierta o en segundo plano; con la app cerrada del todo haría falta Web Push con un
+  servidor (pendiente).
+
 **Técnicas**
 
 - `cacheComponents` desactivado: toda la app es autenticada y dinámica; no compensa la complejidad.

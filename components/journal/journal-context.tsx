@@ -16,14 +16,17 @@ import { createTrade } from "@/app/actions/trades";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useIsDesktop } from "@/hooks/use-media-query";
-import { defaultPnl } from "@/lib/calc/trade";
+import { defaultPnl, isWithSpike } from "@/lib/calc/trade";
 import { defaultChecklist } from "@/lib/domain/checklist";
 import { getInstrument } from "@/lib/domain/instruments";
 import type { JournalMode } from "@/lib/domain/types";
-import type { Account, JournalTrade, Session, Strategy } from "@/lib/data";
+import type { Account, CalmMessage, JournalTrade, Observation, Session, Strategy, WeeklyReview } from "@/lib/data";
 import { toLocalInput } from "@/lib/format";
 import type { EngineTrade, Rule } from "@/lib/rules";
 import type { TradeInput } from "@/lib/schemas";
+import { pauseState } from "@/lib/psych";
+import type { UserSettings } from "@/lib/domain/psych";
+import { clock } from "./session-timer";
 import { addDays, fromLocal, localDate } from "@/lib/time-core";
 import { uploadScreenshot } from "@/lib/upload";
 import { CheckinDialog } from "./checkin-dialog";
@@ -43,11 +46,22 @@ export interface JournalClientData {
   lastTrade: JournalTrade | null;
   balance: number;
   today: string;
+  settings: UserSettings;
+  calmMessages: CalmMessage[];
+  lastReview: WeeklyReview | null;
+  observations: Observation[];
 }
+
+/** Operación de la sesión con lo que necesitan el motor, la pausa y el detector de tilt. */
+export type SessionTrade = EngineTrade & { with_spike: boolean };
 
 interface JournalContextValue {
   data: JournalClientData;
   pending: PendingTrade[];
+  /** Operaciones de hoy (servidor + pendientes), para la pausa y el detector de tilt. */
+  liveTrades: SessionTrade[];
+  /** Lo que te dice tu yo tranquilo hoy (o null si no hay o está apagado). */
+  calmMessage: CalmMessage | null;
   selectedDay: string | null;
   setSelectedDay: (day: string | null) => void;
   /** Abre el registro. En vivo, pide el check-in primero si hace falta. */
@@ -67,22 +81,37 @@ export function useJournal() {
   return ctx;
 }
 
-function toEngine(t: Pick<JournalTrade, "opened_at" | "closed_at" | "stake" | "pnl" | "checklist">): EngineTrade {
-  return { opened_at: t.opened_at, closed_at: t.closed_at, stake: t.stake, pnl: t.pnl, impulse: t.checklist.impulse };
+function toEngine(t: JournalTrade): SessionTrade {
+  return {
+    opened_at: t.opened_at,
+    closed_at: t.closed_at,
+    stake: t.stake,
+    pnl: t.pnl,
+    impulse: t.checklist.impulse,
+    with_spike: t.with_spike,
+  };
 }
 
-function payloadToEngine(p: TradeInput): EngineTrade {
+function payloadToEngine(p: TradeInput, createdAt?: number): SessionTrade {
   return {
-    opened_at: p.opened_at ?? new Date().toISOString(),
+    opened_at: p.opened_at ?? new Date(createdAt ?? Date.now()).toISOString(),
     closed_at: p.closed_at,
     stake: p.stake,
     pnl: p.pnl ?? defaultPnl(p.result, p.stake, p.tp),
     impulse: p.checklist.impulse,
+    with_spike: isWithSpike(p.instrument, p.direction),
   };
 }
 
+/** Un mensaje por día, siempre el mismo ese día. */
+function pickCalmMessage(list: readonly CalmMessage[], today: string): CalmMessage | null {
+  if (list.length === 0) return null;
+  const n = Number(today.replace(/-/g, ""));
+  return list[n % list.length];
+}
+
 function numberString(n: number | null | undefined): string {
-  return n === null || n === undefined ? "" : String(n).replace(".", ",");
+  return n === null || n === undefined ? "" : String(n);
 }
 
 /** Valores iniciales: la operación anterior de la sesión manda (índice, stake, TP). */
@@ -130,6 +159,7 @@ function newTradeValues(
     closed_at: "",
     note: "",
     checklist,
+    anxiety: "",
   };
 }
 
@@ -150,6 +180,7 @@ export function payloadToValues(p: TradeInput): TradeFormValues {
     closed_at: p.closed_at ? toLocalInput(p.closed_at) : "",
     note: p.note ?? "",
     checklist: p.checklist,
+    anxiety: p.anxiety ? String(p.anxiety) : "",
   };
 }
 
@@ -228,6 +259,19 @@ export function JournalProvider({ data, children }: { data: JournalClientData; c
     () => new Set([...data.trades.map((t) => t.id), ...data.sessionTrades.map((t) => t.id)]),
     [data.trades, data.sessionTrades],
   );
+  const liveTrades = useMemo<SessionTrade[]>(
+    () =>
+      data.mode !== "live"
+        ? []
+        : [
+            ...data.sessionTrades.map(toEngine),
+            ...pending
+              .filter((p) => p.status !== "error" && !serverIds.has(p.payload.id))
+              .map((p) => payloadToEngine(p.payload, p.createdAt)),
+          ],
+    [data.mode, data.sessionTrades, pending, serverIds],
+  );
+  const calmMessage = data.settings.psych.calm_self_message ? pickCalmMessage(data.calmMessages, data.today) : null;
   useEffect(() => {
     const saved = pendingStore.get().filter((p) => p.status === "saved");
     if (saved.length === 0) return;
@@ -261,15 +305,27 @@ export function JournalProvider({ data, children }: { data: JournalClientData; c
         toast.info("Cerraste la sesión de hoy", { description: "Puedes reabrirla desde la tira de disciplina." });
         return;
       }
+      if (data.settings.psych.pause_after_loss) {
+        const pause = pauseState(liveTrades, data.rules, new Date().toISOString());
+        if (pause.active) {
+          toast.warning(data.settings.pausePhrase, {
+            description: `Vienes de perder. Puedes registrar de nuevo en ${clock(pause.remainingSec)}.`,
+            duration: 6000,
+          });
+          return;
+        }
+      }
     }
     const lastPending = pendingStore.get().filter((p) => p.payload.account_id === data.account.id).at(-1)?.payload ?? null;
     setFormValues(newTradeValues(data, lastPending));
-  }, [data]);
+  }, [data, liveTrades]);
 
   const value = useMemo<JournalContextValue>(
     () => ({
       data,
       pending,
+      liveTrades,
+      calmMessage,
       selectedDay,
       setSelectedDay,
       startTrade,
@@ -288,28 +344,19 @@ export function JournalProvider({ data, children }: { data: JournalClientData; c
       },
       openCloseSession: () => setCloseOpen(true),
     }),
-    [data, pending, selectedDay, startTrade, submit],
+    [data, pending, liveTrades, calmMessage, selectedDay, startTrade, submit],
   );
 
   const sessionContext = useCallback(
     (date: string | null) => {
-      const pendingEngine = pending.filter((p) => p.status !== "error").map((p) => p.payload);
-      if (date === null) {
-        return {
-          trades: [
-            ...data.sessionTrades.map(toEngine),
-            ...pendingEngine.filter((p) => !serverIds.has(p.id)).map(payloadToEngine),
-          ],
-          openedAt: data.session?.opened_at ?? null,
-        };
-      }
+      if (date === null) return { trades: liveTrades, openedAt: data.session?.opened_at ?? null };
       const sameDay = data.trades.filter((t) => t.session_date === date);
       return {
         trades: sameDay.map(toEngine),
         openedAt: sameDay.reduce<string | null>((min, t) => (min === null || t.opened_at < min ? t.opened_at : min), null),
       };
     },
-    [data, pending, serverIds],
+    [data, liveTrades],
   );
 
   const formOpen = formValues !== null;
@@ -327,6 +374,9 @@ export function JournalProvider({ data, children }: { data: JournalClientData; c
       sessionTrades={sessionContext}
       sessionOpenedAt={data.session?.opened_at ?? null}
       showShortcuts={isDesktop}
+      session={data.mode === "live" ? data.session : null}
+      psych={data.settings.psych}
+      observations={data.observations}
       onCancel={close}
       onSubmit={(payload, file) => {
         close();
@@ -343,9 +393,9 @@ export function JournalProvider({ data, children }: { data: JournalClientData; c
 
       {isDesktop ? (
         <Dialog open={formOpen} onOpenChange={(o) => !o && close()}>
-          <DialogContent className="flex max-h-[min(92vh,52rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
-            <DialogHeader className="px-4 pt-4 pb-3">
-              <DialogTitle>{title}</DialogTitle>
+          <DialogContent className="flex max-h-[min(94vh,60rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+            <DialogHeader className="border-b px-6 pt-5 pb-4">
+              <DialogTitle className="text-lg">{title}</DialogTitle>
               <DialogDescription>{description}</DialogDescription>
             </DialogHeader>
             {form}
@@ -354,7 +404,7 @@ export function JournalProvider({ data, children }: { data: JournalClientData; c
       ) : (
         <Sheet open={formOpen} onOpenChange={(o) => !o && close()}>
           <SheetContent side="bottom" className="flex max-h-[94svh] flex-col gap-0 rounded-t-2xl p-0">
-            <SheetHeader className="px-4 pt-4 pb-2">
+            <SheetHeader className="border-b px-4 pt-4 pb-3">
               <SheetTitle>{title}</SheetTitle>
               <SheetDescription>{description}</SheetDescription>
             </SheetHeader>
@@ -368,6 +418,7 @@ export function JournalProvider({ data, children }: { data: JournalClientData; c
         onOpenChange={setCheckinOpen}
         accountId={data.account.id}
         rules={data.rules}
+        lastReview={data.settings.psych.weekly_review ? data.lastReview : null}
         onDone={(mood) => {
           setCheckinOpen(false);
           router.refresh();

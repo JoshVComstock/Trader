@@ -1,14 +1,13 @@
 import { cn } from "@/lib/utils";
+import { Panel } from "@/components/app/layout";
 import type { Bucket } from "@/lib/calc/metrics";
 import { compactMoney, percent, rValue } from "@/lib/format";
 
 function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <section className="flex min-w-0 flex-col rounded-xl border bg-card px-4 pt-3 pb-4">
-      <h2 className="text-sm font-medium">{title}</h2>
-      {subtitle && <p className="text-xs text-subtle">{subtitle}</p>}
-      <div className="mt-3 flex-1">{children}</div>
-    </section>
+    <Panel title={title} description={subtitle}>
+      {children}
+    </Panel>
   );
 }
 
@@ -57,7 +56,7 @@ export function SpikeCard({ withSpike, against }: { withSpike: Bucket; against: 
     { b: against, hint: "Vender en Boom, comprar en Crash" },
   ];
   return (
-    <Card title="A favor vs contra el spike" subtitle={total ? `${Math.round((against.trades / total) * 100)} % de tus operaciones fueron contra el spike` : undefined}>
+    <Card title="A favor vs contra el spike" subtitle={total ? `${Math.round((against.trades / total) * 100)}% de tus operaciones fueron contra el spike` : undefined}>
       {total === 0 ? (
         <Empty />
       ) : (

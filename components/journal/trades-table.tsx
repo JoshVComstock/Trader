@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { Panel } from "@/components/app/layout";
 import { ChevronLeftIcon, ChevronRightIcon, LoaderIcon, TriangleAlertIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -69,21 +70,21 @@ export function TradesTable({ currency }: { currency: string }) {
   const visible = rows.slice(current * PAGE, current * PAGE + PAGE);
 
   return (
-    <section aria-label="Operaciones" className="rounded-xl border bg-card">
-      <div className="flex items-center justify-between gap-2 px-4 pt-3 pb-2">
-        <h2 className="text-sm font-medium">
-          Operaciones
-          {selectedDay && <span className="font-normal text-muted-foreground"> · {dayLabel(selectedDay)}</span>}
-        </h2>
-        {selectedDay && (
+    <Panel
+      title="Operaciones"
+      description={selectedDay ? dayLabel(selectedDay) : "Toca una fila para ver el detalle."}
+      actions={
+        selectedDay && (
           <Button variant="ghost" size="sm" onClick={() => setSelectedDay(null)}>
             Ver todo el mes
           </Button>
-        )}
-      </div>
+        )
+      }
+      bodyClassName="px-0 pb-0 sm:px-0 sm:pb-0"
+    >
 
       {rows.length === 0 ? (
-        <div className="flex flex-col items-start gap-3 px-4 pt-2 pb-5 text-sm text-muted-foreground">
+        <div className="flex flex-col items-start gap-3 px-4 pt-1 pb-5 text-sm text-muted-foreground sm:px-5">
           <p>
             {data.mode === "backtest"
               ? "Registra tu primera operación de backtesting: fecha, índice, resultado. Sin dinero real, con las mismas reglas."
@@ -96,10 +97,10 @@ export function TradesTable({ currency }: { currency: string }) {
       ) : (
         <>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[46rem] text-sm">
+            <table className="w-full min-w-[48rem] text-sm">
               <thead>
-                <tr className="border-y text-left text-[11px] text-subtle">
-                  <th className="px-4 py-2 font-normal">Fecha</th>
+                <tr className="border-y bg-muted/30 text-left text-xs text-subtle">
+                  <th className="px-4 py-2.5 font-normal sm:px-5">Fecha</th>
                   <th className="px-2 py-2 font-normal">Índice</th>
                   <th className="px-2 py-2 font-normal">Dirección</th>
                   <th className="px-2 py-2 font-normal">Spike</th>
@@ -120,21 +121,21 @@ export function TradesTable({ currency }: { currency: string }) {
                       r.pending ? "bg-muted/30" : "cursor-pointer hover:bg-muted/40",
                     )}
                   >
-                    <td className="num px-4 py-2.5 whitespace-nowrap text-muted-foreground">{dateTimeShort(r.opened_at)}</td>
-                    <td className="px-2 py-2.5 whitespace-nowrap">{instrumentLabel(r.instrument)}</td>
-                    <td className="px-2 py-2.5 text-muted-foreground">{DIRECTION_LABEL[r.direction]}</td>
-                    <td className={cn("px-2 py-2.5 whitespace-nowrap", r.with_spike ? "text-muted-foreground" : "text-warn")}>
+                    <td className="num px-4 py-3 sm:px-5 whitespace-nowrap text-muted-foreground">{dateTimeShort(r.opened_at)}</td>
+                    <td className="px-2 py-3 whitespace-nowrap">{instrumentLabel(r.instrument)}</td>
+                    <td className="px-2 py-3 text-muted-foreground">{DIRECTION_LABEL[r.direction]}</td>
+                    <td className={cn("px-2 py-3 whitespace-nowrap", r.with_spike ? "text-muted-foreground" : "text-warn")}>
                       {r.with_spike ? "A favor" : "Contra"}
                     </td>
-                    <td className="num px-2 py-2.5 text-right text-muted-foreground">{money(r.stake, currency)}</td>
-                    <td className={cn("num px-2 py-2.5 text-right font-medium", outcomeTone[r.outcome])}>{rValue(r.r_multiple)}</td>
-                    <td className="px-2 py-2.5">
+                    <td className="num px-2 py-3 text-right text-muted-foreground">{money(r.stake, currency)}</td>
+                    <td className={cn("num px-2 py-3 text-right font-medium", outcomeTone[r.outcome])}>{rValue(r.r_multiple)}</td>
+                    <td className="px-2 py-3">
                       {r.pending ? <PendingCell p={r.pending} onRetry={retryPending} onEdit={editPending} onDiscard={discardPending} /> : (
                         <span className={outcomeTone[r.outcome]}>{OUTCOME_LABEL[r.outcome]}</span>
                       )}
                     </td>
-                    <td className="px-2 py-2.5 text-muted-foreground">{r.mood ? MOOD_LABEL[r.mood as keyof typeof MOOD_LABEL] : "—"}</td>
-                    <td className="px-2 py-2.5">
+                    <td className="px-2 py-3 text-muted-foreground">{r.mood ? MOOD_LABEL[r.mood as keyof typeof MOOD_LABEL] : "—"}</td>
+                    <td className="px-2 py-3">
                       {r.violations > 0 && (
                         <TriangleAlertIcon className="size-4 text-warn" aria-label={`Rompió ${r.violations} ${r.violations === 1 ? "regla" : "reglas"}`} />
                       )}
@@ -162,7 +163,7 @@ export function TradesTable({ currency }: { currency: string }) {
           )}
         </>
       )}
-    </section>
+    </Panel>
   );
 }
 

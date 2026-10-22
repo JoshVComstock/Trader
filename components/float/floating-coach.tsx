@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckIcon, ImageIcon, PencilIcon, GripHorizontalIcon, MinusIcon, PlusIcon, RotateCcwIcon, XIcon } from "lucide-react";
+import { CameraIcon, CheckIcon, ImageIcon, GripHorizontalIcon, MinusIcon, PlusIcon, RotateCcwIcon, XIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Logo } from "@/components/app/logo";
@@ -100,13 +100,13 @@ export function FloatingCoach({
   host,
   onClose,
   onCapture,
-  drawing,
+  captureOpen,
 }: {
   host: CoachHost;
   onClose: () => void;
   /** Captura la pantalla desde la ventana donde se hizo el clic. */
   onCapture: (win: Window) => void;
-  drawing: boolean;
+  captureOpen: boolean;
 }) {
   // Si se cierra la ventana PiP con su propia X, se avisa.
   useEffect(() => {
@@ -119,15 +119,15 @@ export function FloatingCoach({
 
   if (host.kind === "pip") {
     return createPortal(
-      <CoachPanel ownerWindow={host.win} onClose={onClose} onCapture={onCapture} drawing={drawing} fill />,
+      <CoachPanel ownerWindow={host.win} onClose={onClose} onCapture={onCapture} captureOpen={captureOpen} fill />,
       host.win.document.body,
     );
   }
-  return <InlineFloat onClose={onClose} onCapture={onCapture} drawing={drawing} />;
+  return <InlineFloat onClose={onClose} onCapture={onCapture} captureOpen={captureOpen} />;
 }
 
 /** Div flotante que se arrastra por la pantalla (cuando no hay PiP). */
-function InlineFloat({ onClose, onCapture, drawing }: { onClose: () => void; onCapture: (win: Window) => void; drawing: boolean }) {
+function InlineFloat({ onClose, onCapture, captureOpen }: { onClose: () => void; onCapture: (win: Window) => void; captureOpen: boolean }) {
   const [pos, setPos] = useState(() => {
     try {
       const raw = window.localStorage.getItem("racha:coach:pos");
@@ -183,7 +183,7 @@ function InlineFloat({ onClose, onCapture, drawing }: { onClose: () => void; onC
           </IconButton>
         </span>
       </div>
-      <CoachPanel ownerWindow={window} onClose={onClose} onCapture={onCapture} drawing={drawing} compact={minimized} />
+      <CoachPanel ownerWindow={window} onClose={onClose} onCapture={onCapture} captureOpen={captureOpen} compact={minimized} />
     </div>
   );
 }
@@ -212,14 +212,14 @@ function CoachPanel({
   ownerWindow,
   onClose,
   onCapture,
-  drawing,
+  captureOpen,
   compact = false,
   fill = false,
 }: {
   ownerWindow: Window;
   onClose: () => void;
   onCapture: (win: Window) => void;
-  drawing: boolean;
+  captureOpen: boolean;
   compact?: boolean;
   fill?: boolean;
 }) {
@@ -356,11 +356,8 @@ function CoachPanel({
         </div>
       )}
 
-      {drawing && (
-        <p className="flex items-center gap-1.5 border-t bg-loss/10 px-3 py-1.5 text-xs">
-          <span className="size-2 animate-pulse rounded-full bg-loss" />
-          Dibujando en vivo en Racha. Toma la captura cuando quieras.
-        </p>
+      {captureOpen && (
+        <p className="border-t bg-brand/10 px-3 py-1.5 text-xs">Captura tomada: vuelve a Racha para dibujar sobre ella.</p>
       )}
       <ReadyImage />
 
@@ -382,8 +379,8 @@ function CoachPanel({
           onClick={() => onCapture(ownerWindow)}
           className="flex h-10 items-center justify-center gap-1 rounded-lg border text-xs font-medium hover:bg-muted"
         >
-          <PencilIcon className="size-3.5" />
-          Dibujar
+          <CameraIcon className="size-3.5" />
+          Capturar
         </button>
         <button
           type="button"

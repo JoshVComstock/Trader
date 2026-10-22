@@ -1,6 +1,6 @@
 "use client";
 
-import { PencilIcon, ChevronLeftIcon, ChevronRightIcon, HourglassIcon, PictureInPicture2Icon, PlusIcon } from "lucide-react";
+import { CameraIcon, ChevronLeftIcon, ChevronRightIcon, HourglassIcon, PictureInPicture2Icon, PlusIcon } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AppHeader } from "@/components/app/app-header";
 import { Button } from "@/components/ui/button";
@@ -168,9 +168,9 @@ function CoachButtons() {
         <PictureInPicture2Icon />
         <span className="hidden lg:inline">Ventana flotante</span>
       </Button>
-      <Button variant="outline" size="lg" onClick={() => captureFrom()} title="Dibuja en vivo sobre tu pantalla; captura cuando quieras">
-        <PencilIcon />
-        <span className="hidden lg:inline">Dibujar</span>
+      <Button variant="outline" size="lg" onClick={() => captureFrom()} title="Capturar la pantalla y dibujar encima">
+        <CameraIcon />
+        <span className="hidden lg:inline">Capturar</span>
       </Button>
     </>
   );

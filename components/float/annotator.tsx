@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  CameraIcon,
   DownloadIcon,
   MinusIcon,
   MoveDiagonalIcon,
@@ -13,11 +12,10 @@ import {
   Undo2Icon,
   Trash2Icon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { isStream } from "./capture";
 
 type Point = [number, number];
 type Tool = "pen" | "hline" | "vline" | "line" | "rect" | "text";
@@ -99,28 +97,21 @@ function drawShape(ctx: CanvasRenderingContext2D, s: Shape, scale: number, w: nu
   }
 }
 
-type Frame = { el: CanvasImageSource; w: number; h: number };
-
 /**
- * Dibujo tipo Epic Pen: lápiz, líneas horizontales, verticales y diagonales, cuadrados y texto.
- * Con una transmisión de pantalla (MediaStream) dibujas EN VIVO, con las velas moviéndose debajo;
- * "Tomar captura" congela ese instante con tus dibujos. Con una imagen (Blob) dibujas sobre ella.
- * El navegador no puede dibujar encima de otras aplicaciones: se dibuja sobre su espejo en Racha.
+ * Dibujo sobre una captura, tipo Epic Pen: lápiz, líneas horizontales, verticales y diagonales,
+ * cuadrados y texto, en colores. El navegador no puede dibujar encima de otras aplicaciones,
+ * así que se dibuja sobre la captura de la pantalla.
  */
 export function AnnotatorDialog({
-  source,
+  image,
   onClose,
-  onCaptured,
   onAttachNext,
   attachTargets = [],
   onAttachTo,
   primary,
 }: {
-  /** Pantalla en vivo o imagen ya tomada. */
-  source: MediaStream | Blob | null;
+  image: Blob | null;
   onClose: () => void;
-  /** Al tomar la captura en vivo: la imagen (cuadro + dibujos) queda lista. */
-  onCaptured?: (blob: Blob) => void;
   /** Guardar para la próxima operación que se registre. */
   onAttachNext?: (blob: Blob) => void;
   /** Operaciones ya registradas a las que se puede adjuntar. */
@@ -130,19 +121,7 @@ export function AnnotatorDialog({
   primary?: { label: string; run: (blob: Blob) => Promise<void> | void };
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  // El <video> vive dentro del diálogo, que se monta después: se conecta cuando aparece.
-  const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
-  const attachVideo = useCallback((el: HTMLVideoElement | null) => {
-    videoRef.current = el;
-    setVideoEl(el);
-  }, []);
-  /** Imagen de fondo: la captura congelada o la imagen recibida. Null mientras está en vivo. */
-  const [img, setImg] = useState<Frame | null>(null);
-  /** Tamaño de la transmisión en vivo. */
-  const [liveSize, setLiveSize] = useState<{ w: number; h: number } | null>(null);
-  const stream = isStream(source) ? source : null;
-  const live = stream !== null && img === null;
+  const [img, setImg] = useState<HTMLImageElement | null>(null);
   const [shapes, setShapes] = useState<Shape[]>([]);
   const [draft, setDraft] = useState<Shape | null>(null);
   const [tool, setTool] = useState<Tool>("pen");
@@ -152,49 +131,28 @@ export function AnnotatorDialog({
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // Imagen recibida: se carga como fondo.
+  // Carga la imagen de la captura.
   useEffect(() => {
-    if (!(source instanceof Blob)) return;
-    const url = URL.createObjectURL(source);
+    if (!image) return;
+    const url = URL.createObjectURL(image);
     const el = new Image();
-    el.onload = () => setImg({ el, w: el.naturalWidth, h: el.naturalHeight });
+    el.onload = () => setImg(el);
     el.src = url;
     return () => URL.revokeObjectURL(url);
-  }, [source]);
+  }, [image]);
 
-  // Pantalla en vivo: se conecta al <video>. Al cerrar o congelar, se corta la transmisión.
-  useEffect(() => {
-    const video = videoEl;
-    if (!stream || !video) return;
-    video.srcObject = stream;
-    const onMeta = () => setLiveSize({ w: video.videoWidth, h: video.videoHeight });
-    video.addEventListener("loadedmetadata", onMeta);
-    void video.play().catch(() => undefined);
-    return () => {
-      video.removeEventListener("loadedmetadata", onMeta);
-    };
-  }, [stream, videoEl]);
-
-  // Al cerrar el editor (o cambiar de fuente), se corta la transmisión.
-  useEffect(() => {
-    if (!stream) return;
-    return () => stream.getTracks().forEach((t) => t.stop());
-  }, [stream]);
-
-  const size2d = useMemo(() => (img ? { w: img.w, h: img.h } : liveSize), [img, liveSize]);
-  const scale = size2d ? Math.max(1, size2d.w / 1400) : 1;
+  const scale = img ? Math.max(1, img.naturalWidth / 1400) : 1;
 
   const render = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !size2d) return;
+    if (!canvas || !img) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    canvas.width = size2d.w;
-    canvas.height = size2d.h;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (img) ctx.drawImage(img.el, 0, 0);
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    ctx.drawImage(img, 0, 0);
     for (const s of draft ? [...shapes, draft] : shapes) drawShape(ctx, s, scale, canvas.width, canvas.height);
-  }, [img, size2d, shapes, draft, scale]);
+  }, [img, shapes, draft, scale]);
 
   useEffect(render, [render]);
 
@@ -205,7 +163,7 @@ export function AnnotatorDialog({
   }
 
   function onDown(e: PointerEvent<HTMLCanvasElement>) {
-    if (!size2d) return;
+    if (!img) return;
     const p = toImage(e);
     if (tool === "text") {
       const wrap = e.currentTarget.parentElement!.getBoundingClientRect();
@@ -245,30 +203,10 @@ export function AnnotatorDialog({
   }
 
   // Atajos: L H V D C T para herramientas, Ctrl+Z deshacer.
-  const freezeRef = useRef(freeze);
   useEffect(() => {
-    freezeRef.current = freeze;
-  });
-  // Si dejas de compartir desde la barra del navegador, se queda con el último cuadro.
-  useEffect(() => {
-    const track = stream?.getVideoTracks()[0];
-    if (!track) return;
-    const onEnded = () => {
-      if (videoRef.current?.srcObject) void freezeRef.current();
-    };
-    track.addEventListener("ended", onEnded);
-    return () => track.removeEventListener("ended", onEnded);
-  }, [stream]);
-
-  useEffect(() => {
-    if (!source) return;
+    if (!image) return;
     function onKey(e: KeyboardEvent) {
       if (e.target instanceof HTMLInputElement) return;
-      if (e.key === " " && videoRef.current?.srcObject) {
-        e.preventDefault();
-        void freezeRef.current();
-        return;
-      }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
         setShapes((list) => list.slice(0, -1));
@@ -279,30 +217,7 @@ export function AnnotatorDialog({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [source]);
-
-  /** Congela el cuadro actual de la pantalla en vivo con tus dibujos encima. */
-  async function freeze() {
-    const video = videoRef.current;
-    if (!video || !liveSize) return;
-    const frame = document.createElement("canvas");
-    frame.width = liveSize.w;
-    frame.height = liveSize.h;
-    frame.getContext("2d")?.drawImage(video, 0, 0, liveSize.w, liveSize.h);
-    video.srcObject = null;
-    stream?.getTracks().forEach((t) => t.stop());
-    setImg({ el: frame, w: liveSize.w, h: liveSize.h });
-    // La imagen final se arma aparte (cuadro + dibujos): funciona aunque la pestaña esté en segundo plano.
-    const out = document.createElement("canvas");
-    out.width = liveSize.w;
-    out.height = liveSize.h;
-    const ctx = out.getContext("2d");
-    if (!ctx) return;
-    ctx.drawImage(frame, 0, 0);
-    for (const s of shapes) drawShape(ctx, s, scale, out.width, out.height);
-    const blob = await new Promise<Blob | null>((resolve) => out.toBlob(resolve, "image/webp", 0.92));
-    if (blob) onCaptured?.(blob);
-  }
+  }, [image]);
 
   async function exportBlob(): Promise<Blob> {
     const canvas = canvasRef.current;
@@ -322,23 +237,21 @@ export function AnnotatorDialog({
   }
 
   function reset() {
-    stream?.getTracks().forEach((t) => t.stop());
     setShapes([]);
     setDraft(null);
     setTextAt(null);
     setImg(null);
-    setLiveSize(null);
     onClose();
   }
 
   return (
-    <Dialog open={source !== null} onOpenChange={(o) => !o && reset()}>
+    <Dialog open={image !== null} onOpenChange={(o) => !o && reset()}>
       <DialogContent
         showCloseButton={false}
         className="flex h-[94vh] max-w-[98vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-[98vw]"
         onPointerDownOutside={(e) => e.preventDefault()}
       >
-        <DialogTitle className="sr-only">{live ? "Dibujar sobre tu pantalla en vivo" : "Dibujar sobre la captura"}</DialogTitle>
+        <DialogTitle className="sr-only">Dibujar sobre la captura</DialogTitle>
         <DialogDescription className="sr-only">Lápiz, líneas, cuadrados y texto sobre tu captura de pantalla.</DialogDescription>
 
         {/* Barra de herramientas */}
@@ -406,22 +319,10 @@ export function AnnotatorDialog({
           </Button>
 
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            {live && (
-              <>
-                <span className="flex items-center gap-1.5 rounded-md bg-loss/15 px-2 py-1 text-xs font-medium text-loss">
-                  <span className="size-2 animate-pulse rounded-full bg-loss" />
-                  En vivo
-                </span>
-                <Button size="sm" onClick={() => void freeze()} disabled={!liveSize} title="Congela este instante con tus dibujos (Espacio)">
-                  <CameraIcon />
-                  Tomar captura
-                </Button>
-              </>
-            )}
             <Button
               variant="ghost"
               size="sm"
-              disabled={busy || !img || live}
+              disabled={busy || !img}
               onClick={() =>
                 run((blob) => {
                   const a = document.createElement("a");
@@ -439,7 +340,7 @@ export function AnnotatorDialog({
               <select
                 className="h-8 rounded-lg border bg-transparent px-2 text-sm dark:bg-input/30"
                 defaultValue=""
-                disabled={busy || !img || live}
+                disabled={busy || !img}
                 aria-label="Adjuntar a una operación ya registrada"
                 onChange={(e) => {
                   const id = e.target.value;
@@ -463,7 +364,7 @@ export function AnnotatorDialog({
             {primary && (
               <Button
                 size="sm"
-                disabled={busy || !img || live}
+                disabled={busy || !img}
                 onClick={() =>
                   run(async (blob) => {
                     await primary.run(blob);
@@ -478,7 +379,7 @@ export function AnnotatorDialog({
             {onAttachNext && (
               <Button
                 size="sm"
-                disabled={busy || !img || live}
+                disabled={busy || !img}
                 onClick={() =>
                   run((blob) => {
                     onAttachNext(blob);
@@ -498,23 +399,11 @@ export function AnnotatorDialog({
 
         {/* Lienzo */}
         <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-auto bg-black/80 p-3">
-          {!size2d && <p className="text-sm text-muted-foreground">{stream ? "Conectando con tu pantalla…" : "Cargando captura…"}</p>}
+          {!img && <p className="text-sm text-muted-foreground">Cargando captura…</p>}
           <div className="relative max-h-full max-w-full">
-            {stream && (
-              <video
-                ref={attachVideo}
-                muted
-                playsInline
-                className={cn("block max-h-[calc(94vh-5rem)] max-w-full", !live && "hidden")}
-              />
-            )}
             <canvas
               ref={canvasRef}
-              className={cn(
-                "touch-none",
-                live ? "absolute inset-0 h-full w-full" : "block max-h-[calc(94vh-5rem)] max-w-full",
-                tool === "text" ? "cursor-text" : "cursor-crosshair",
-              )}
+              className={cn("block max-h-[calc(94vh-5rem)] max-w-full touch-none", tool === "text" ? "cursor-text" : "cursor-crosshair")}
               onPointerDown={onDown}
               onPointerMove={onMove}
               onPointerUp={onUp}

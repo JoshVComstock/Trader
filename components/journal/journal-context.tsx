@@ -24,7 +24,7 @@ import type { Account, CalmMessage, JournalTrade, Observation, Session, Strategy
 import { signedMoney, timeShort, toLocalInput } from "@/lib/format";
 import { instrumentLabel } from "@/lib/domain/instruments";
 import { AnnotatorDialog } from "../float/annotator";
-import { pendingCapture, startScreenStream } from "../float/capture";
+import { captureScreen, pendingCapture } from "../float/capture";
 import { FloatingCoach, openCoachHost, supportsPip, type CoachHost } from "../float/floating-coach";
 import type { EngineTrade, Rule } from "@/lib/rules";
 import type { TradeInput } from "@/lib/schemas";
@@ -82,7 +82,7 @@ interface JournalContextValue {
   /** Abre (o enfoca) la ventana flotante de la estrategia. Llamar dentro de un clic. */
   openCoach: () => void;
   coachOpen: boolean;
-  /** Comparte la pantalla en vivo y abre el editor para dibujar encima. */
+  /** Captura la pantalla y abre el editor de dibujo. */
   captureFrom: (win?: Window) => void;
 }
 
@@ -271,10 +271,8 @@ export function JournalProvider({ data, children }: { data: JournalClientData; c
   /** Foto para el formulario que se abre (una captura dibujada en la ventana flotante). */
   const [formFile, setFormFile] = useState<Blob | null>(null);
   const [coachHost, setCoachHost] = useState<CoachHost | null>(null);
-  /** Pantalla en vivo (o imagen) abierta en el editor de dibujo. */
-  const [captureSource, setCaptureSource] = useState<MediaStream | Blob | null>(null);
-  /** Hay una pantalla en vivo abierta y todavía no se tomó la captura. */
-  const [liveDrawing, setLiveDrawing] = useState(false);
+  /** Captura abierta en el editor de dibujo. */
+  const [captureImage, setCaptureImage] = useState<Blob | null>(null);
   const openForm = useCallback((values: TradeFormValues) => {
     setFormFile(pendingCapture.take());
     setFormValues(values);
@@ -391,10 +389,9 @@ export function JournalProvider({ data, children }: { data: JournalClientData; c
         });
       },
       captureFrom: (win) => {
-        startScreenStream(win ?? window).then(
-          (stream) => {
-            setCaptureSource(stream);
-            setLiveDrawing(true);
+        captureScreen(win ?? window).then(
+          (blob) => {
+            setCaptureImage(blob);
             window.focus();
           },
           (e: unknown) => {
@@ -483,24 +480,16 @@ export function JournalProvider({ data, children }: { data: JournalClientData; c
             setCoachHost(null);
           }}
           onCapture={(win) => value.captureFrom(win)}
-          drawing={liveDrawing}
+          captureOpen={captureImage !== null}
         />
       )}
 
       <AnnotatorDialog
-        source={captureSource}
-        onClose={() => {
-          setCaptureSource(null);
-          setLiveDrawing(false);
-        }}
-        onCaptured={(blob) => {
-          setLiveDrawing(false);
-          pendingCapture.set(blob);
-          toast.success("Imagen lista", { description: "Puedes seguir dibujando. Se adjunta a tu próxima operación." });
-        }}
+        image={captureImage}
+        onClose={() => setCaptureImage(null)}
         onAttachNext={(blob) => {
           pendingCapture.set(blob);
-          toast.success("Captura lista", { description: "Se adjunta sola a la próxima operación que registres." });
+          toast.success("Imagen lista", { description: "Se adjunta sola a la próxima operación que registres." });
         }}
         attachTargets={(data.mode === "live" ? data.sessionTrades : data.trades.slice(0, 15)).map((t) => ({
           id: t.id,

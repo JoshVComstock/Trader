@@ -1,9 +1,6 @@
 "use client";
 
 import { LockIcon } from "lucide-react";
-import { useTransition } from "react";
-import { toast } from "sonner";
-import { reopenSession } from "@/app/actions/sessions";
 import { Panel } from "@/components/app/layout";
 import { Button } from "@/components/ui/button";
 import { defaultPnl } from "@/lib/calc/trade";
@@ -49,7 +46,6 @@ export function DisciplineStrip() {
   const pause = usePause();
   const { session, mode } = data;
   const sessionClock = useSessionClock(mode === "live" ? session : null, data.rules);
-  const [reopening, startReopen] = useTransition();
 
   if (mode === "live" && !session) {
     return (
@@ -128,22 +124,7 @@ export function DisciplineStrip() {
         </Button>
       )}
       {mode === "live" && session.status === "closed" && (
-        <>
-          <span className="text-xs text-subtle">Cerrada</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={reopening}
-            onClick={() =>
-              startReopen(async () => {
-                const res = await reopenSession(session.id);
-                if (!res.ok) toast.error(res.error);
-              })
-            }
-          >
-            Reabrir
-          </Button>
-        </>
+        <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">Cerrada · vuelve mañana</span>
       )}
       {session.status === "blocked" && !session.journal && mode === "live" && (
         <Button variant="ghost" size="sm" onClick={openCloseSession}>

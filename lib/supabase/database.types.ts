@@ -141,14 +141,14 @@ isOneToOne: false
                   ]
                 },"sessions": {
                   Row: {
-                    "account_id": string,"blocked_reason": string | null,"closed_at": string | null,"created_at": string,"date": string,"followed_plan": boolean | null,"goal_r": number | null,"id": string,"journal": string | null,"mood_before": Database["public"]['Enums']["mood"] | null,"opened_at": string,"planned_minutes": number | null,"read_rules": boolean,"status": Database["public"]['Enums']["session_status"],"user_id": string
+                    "account_id": string,"blocked_reason": string | null,"closed_at": string | null,"created_at": string,"date": string,"followed_plan": boolean | null,"goal_amount": number | null,"goal_r": number | null,"id": string,"journal": string | null,"mood_before": Database["public"]['Enums']["mood"] | null,"opened_at": string,"planned_minutes": number | null,"read_rules": boolean,"status": Database["public"]['Enums']["session_status"],"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "account_id": string,"blocked_reason"?: string | null,"closed_at"?: string | null,"created_at"?: string,"date": string,"followed_plan"?: boolean | null,"goal_r"?: number | null,"id"?: string,"journal"?: string | null,"mood_before"?: Database["public"]['Enums']["mood"] | null,"opened_at"?: string,"planned_minutes"?: number | null,"read_rules"?: boolean,"status"?: Database["public"]['Enums']["session_status"],"user_id"?: string
+                    "account_id": string,"blocked_reason"?: string | null,"closed_at"?: string | null,"created_at"?: string,"date": string,"followed_plan"?: boolean | null,"goal_amount"?: number | null,"goal_r"?: number | null,"id"?: string,"journal"?: string | null,"mood_before"?: Database["public"]['Enums']["mood"] | null,"opened_at"?: string,"planned_minutes"?: number | null,"read_rules"?: boolean,"status"?: Database["public"]['Enums']["session_status"],"user_id"?: string
                   }
                   Update: {
-                    "account_id"?: string,"blocked_reason"?: string | null,"closed_at"?: string | null,"created_at"?: string,"date"?: string,"followed_plan"?: boolean | null,"goal_r"?: number | null,"id"?: string,"journal"?: string | null,"mood_before"?: Database["public"]['Enums']["mood"] | null,"opened_at"?: string,"planned_minutes"?: number | null,"read_rules"?: boolean,"status"?: Database["public"]['Enums']["session_status"],"user_id"?: string
+                    "account_id"?: string,"blocked_reason"?: string | null,"closed_at"?: string | null,"created_at"?: string,"date"?: string,"followed_plan"?: boolean | null,"goal_amount"?: number | null,"goal_r"?: number | null,"id"?: string,"journal"?: string | null,"mood_before"?: Database["public"]['Enums']["mood"] | null,"opened_at"?: string,"planned_minutes"?: number | null,"read_rules"?: boolean,"status"?: Database["public"]['Enums']["session_status"],"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -250,7 +250,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "account_kind": "real"|"demo"|"backtest","instrument_family": "boom"|"crash","mood": "tranquilo"|"acelerado"|"cansado","observation_kind": "zona"|"patron"|"nota","rule_action": "warn"|"block","rule_type": "max_trades"|"max_losses"|"max_session_minutes"|"max_risk_pct"|"allowed_hours"|"no_size_increase_after_loss"|"min_gap_seconds"|"max_psych_errors","session_status": "open"|"closed"|"blocked","trade_direction": "buy"|"sell","trade_outcome": "win"|"loss"|"tie"
+            "account_kind": "real"|"demo"|"backtest","instrument_family": "boom"|"crash","mood": "tranquilo"|"acelerado"|"cansado","observation_kind": "zona"|"patron"|"nota","rule_action": "warn"|"block","rule_type": "max_trades"|"max_losses"|"max_session_minutes"|"max_risk_pct"|"allowed_hours"|"no_size_increase_after_loss"|"min_gap_seconds"|"max_psych_errors"|"daily_goal"|"protect_profit","session_status": "open"|"closed"|"blocked","trade_direction": "buy"|"sell","trade_outcome": "win"|"loss"|"tie"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -366,7 +366,7 @@ export type CompositeTypes<
 export const Constants = {
   "public": {
           Enums: {
-            "account_kind": ["real", "demo", "backtest"],"instrument_family": ["boom", "crash"],"mood": ["tranquilo", "acelerado", "cansado"],"observation_kind": ["zona", "patron", "nota"],"rule_action": ["warn", "block"],"rule_type": ["max_trades", "max_losses", "max_session_minutes", "max_risk_pct", "allowed_hours", "no_size_increase_after_loss", "min_gap_seconds", "max_psych_errors"],"session_status": ["open", "closed", "blocked"],"trade_direction": ["buy", "sell"],"trade_outcome": ["win", "loss", "tie"]
+            "account_kind": ["real", "demo", "backtest"],"instrument_family": ["boom", "crash"],"mood": ["tranquilo", "acelerado", "cansado"],"observation_kind": ["zona", "patron", "nota"],"rule_action": ["warn", "block"],"rule_type": ["max_trades", "max_losses", "max_session_minutes", "max_risk_pct", "allowed_hours", "no_size_increase_after_loss", "min_gap_seconds", "max_psych_errors", "daily_goal", "protect_profit"],"session_status": ["open", "closed", "blocked"],"trade_direction": ["buy", "sell"],"trade_outcome": ["win", "loss", "tie"]
           }
         }
 } as const

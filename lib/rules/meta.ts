@@ -67,4 +67,16 @@ export const RULE_META: { [T in RuleType]: RuleMeta<T> } = {
     fields: [{ key: "n", label: "Errores", kind: "int" }],
     defaults: { n: 2 },
   },
+  daily_goal: {
+    title: "Objetivo del día",
+    description: "Al llegar a la meta que pones en el check-in, se acaba el día. Bloquea protege lo ganado.",
+    fields: [],
+    defaults: {},
+  },
+  protect_profit: {
+    title: "Proteger la ganancia",
+    description: "Después de llegar a la meta, si devuelves este porcentaje de lo ganado, se para.",
+    fields: [{ key: "pct", label: "Puedes devolver", kind: "int", suffix: "%" }],
+    defaults: { pct: 50 },
+  },
 };

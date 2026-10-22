@@ -28,6 +28,10 @@ function byOpenedAt(a: EngineTrade, b: EngineTrade): number {
   return ms(a.opened_at) - ms(b.opened_at);
 }
 
+function sum(trades: readonly EngineTrade[]): number {
+  return trades.reduce((a, t) => a + t.pnl, 0);
+}
+
 /** La operación inmediatamente anterior a la candidata dentro de la sesión. */
 function previousTrade(input: EngineInput): EngineTrade | undefined {
   const t = ms(input.candidate.opened_at);
@@ -132,6 +136,47 @@ const checks: { [T in Rule["type"]]: Check<T> } = {
     if (input.candidate.stake > limit + 1e-9) {
       return {
         violation: `Subiste el riesgo de ${money.format(prev.stake)} a ${money.format(input.candidate.stake)} justo después de perder.`,
+      };
+    }
+    return {};
+  },
+
+  daily_goal(_rule, input) {
+    const goal = input.goalAmount;
+    if (!goal || !(goal > 0)) return {};
+    const before = sum(input.sessionTrades);
+    const after = before + input.candidate.pnl;
+    if (before < goal && after >= goal - 1e-9) {
+      return {
+        limit: `Llegaste a tu objetivo del día (${money.format(after)} de ${money.format(goal)}). Lo que sigue es arriesgar lo ganado — ${STOP}`,
+      };
+    }
+    return {};
+  },
+
+  protect_profit(rule, input) {
+    const goal = input.goalAmount;
+    if (!goal || !(goal > 0)) return {};
+    // Solo después de haber llegado a la meta: si devuelves el porcentaje, se para.
+    const ordered = [...input.sessionTrades, input.candidate].sort(byOpenedAt);
+    let net = 0;
+    let peak = 0;
+    let before = 0;
+    let peakBefore = 0;
+    for (const t of ordered) {
+      if (t === input.candidate) {
+        before = net;
+        peakBefore = peak;
+      }
+      net += t.pnl;
+      peak = Math.max(peak, net);
+    }
+    const reached = Math.max(peakBefore, before) >= goal - 1e-9;
+    if (!reached) return {};
+    const floor = peakBefore * (1 - rule.params.pct / 100);
+    if (before > floor && net <= floor + 1e-9) {
+      return {
+        limit: `Llegaste a ${money.format(peakBefore)} y ya devolviste el ${pct.format(rule.params.pct)}%. Protege lo que queda: para aquí — ${STOP}`,
       };
     }
     return {};

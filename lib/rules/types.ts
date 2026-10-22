@@ -7,6 +7,8 @@ export const RULE_TYPES = [
   "no_size_increase_after_loss",
   "min_gap_seconds",
   "max_psych_errors",
+  "daily_goal",
+  "protect_profit",
 ] as const;
 
 export type RuleType = (typeof RULE_TYPES)[number];
@@ -21,6 +23,10 @@ export interface RuleParamsMap {
   no_size_increase_after_loss: { factor: number };
   min_gap_seconds: { seconds: number };
   max_psych_errors: { n: number };
+  /** La meta se escribe en el check-in de cada día (sessions.goal_amount). */
+  daily_goal: Record<string, never>;
+  /** Tras llegar a la meta, cuánto de lo ganado puedes devolver antes de parar. */
+  protect_profit: { pct: number };
 }
 
 export type RuleOf<T extends RuleType> = {
@@ -51,6 +57,8 @@ export interface EngineInput {
   /** Balance de la cuenta antes de la operación. */
   balance: number;
   rules: readonly Rule[];
+  /** Objetivo del día en dólares, si lo pusiste en el check-in. */
+  goalAmount?: number | null;
 }
 
 /** La operación rompió una regla. Se guarda como fila en `rule_violations`. */

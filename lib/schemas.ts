@@ -89,6 +89,8 @@ export const checkinSchema = z.object({
   mood_before: moodSchema,
   read_rules: z.boolean(),
   goal_r: z.number().finite().min(-100).max(100).nullable(),
+  /** Meta del día en dólares. */
+  goal_amount: z.number().finite().positive("La meta tiene que ser mayor que cero").max(1_000_000).nullable().default(null),
   planned_minutes: z.number().int().min(5, "Mínimo 5 minutos").max(600, "Máximo 10 horas").nullable(),
 });
 export type CheckinInput = z.infer<typeof checkinSchema>;
@@ -136,6 +138,8 @@ export const ruleParamsSchemas = {
   no_size_increase_after_loss: z.object({ factor: z.number().min(1).max(10) }),
   min_gap_seconds: z.object({ seconds: int(0, 24 * 3600) }),
   max_psych_errors: z.object({ n: int(1, 50) }),
+  daily_goal: z.object({}).strict(),
+  protect_profit: z.object({ pct: int(10, 90) }),
 } as const;
 
 const ruleAction = z.enum(["warn", "block"]);
@@ -149,6 +153,8 @@ export const ruleSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("no_size_increase_after_loss"), params: ruleParamsSchemas.no_size_increase_after_loss, action: ruleAction, enabled: z.boolean() }),
   z.object({ type: z.literal("min_gap_seconds"), params: ruleParamsSchemas.min_gap_seconds, action: ruleAction, enabled: z.boolean() }),
   z.object({ type: z.literal("max_psych_errors"), params: ruleParamsSchemas.max_psych_errors, action: ruleAction, enabled: z.boolean() }),
+  z.object({ type: z.literal("daily_goal"), params: z.object({}).catch({}), action: ruleAction, enabled: z.boolean() }),
+  z.object({ type: z.literal("protect_profit"), params: ruleParamsSchemas.protect_profit, action: ruleAction, enabled: z.boolean() }),
 ]);
 
 /** Convierte filas de `rules` (params jsonb) en reglas tipadas; descarta las inválidas. */

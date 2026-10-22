@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { ImagePlusIcon, LoaderIcon, Trash2Icon } from "lucide-react";
+import { CameraIcon, ImagePlusIcon, LoaderIcon, Trash2Icon } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { imageFromClipboard } from "@/lib/image";
 import { uploadScreenshot } from "@/lib/upload";
+import { AnnotatorDialog } from "@/components/float/annotator";
+import { captureScreen } from "@/components/float/capture";
 
 interface Shot {
   id: string;
@@ -27,6 +29,14 @@ export function AttachmentsPanel({ tradeId, initial, enabled }: { tradeId: strin
   const [open, setOpen] = useState<Shot | null>(null);
   const [removing, startRemove] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
+  const [captured, setCaptured] = useState<Blob | null>(null);
+
+  function capture() {
+    captureScreen().then(setCaptured, (e: unknown) => {
+      if (e instanceof DOMException && e.name === "NotAllowedError") return;
+      toast.error(e instanceof Error ? e.message : "No pudimos capturar la pantalla");
+    });
+  }
 
   async function upload(files: Blob[]) {
     if (!enabled) {
@@ -97,12 +107,18 @@ export function AttachmentsPanel({ tradeId, initial, enabled }: { tradeId: strin
     >
       <div className="flex items-center justify-between">
         <h2 className="text-base font-semibold">Capturas</h2>
-        {shots.length > 0 && (
-          <Button variant="ghost" size="sm" onClick={() => inputRef.current?.click()}>
-            <ImagePlusIcon />
-            Añadir
+        <div className="flex gap-1">
+          <Button variant="ghost" size="sm" onClick={capture} title="Capturar la pantalla y dibujar encima">
+            <CameraIcon />
+            Capturar pantalla
           </Button>
-        )}
+          {shots.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={() => inputRef.current?.click()}>
+              <ImagePlusIcon />
+              Añadir
+            </Button>
+          )}
+        </div>
       </div>
 
       {shots.length > 0 && (
@@ -152,6 +168,12 @@ export function AttachmentsPanel({ tradeId, initial, enabled }: { tradeId: strin
           void upload([...(e.target.files ?? [])]);
           e.target.value = "";
         }}
+      />
+
+      <AnnotatorDialog
+        image={captured}
+        onClose={() => setCaptured(null)}
+        primary={{ label: "Adjuntar a esta operación", run: (blob) => upload([blob]) }}
       />
 
       <Dialog open={open !== null} onOpenChange={(o) => !o && setOpen(null)}>

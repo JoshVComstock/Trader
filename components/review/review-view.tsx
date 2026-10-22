@@ -78,6 +78,12 @@ export function ReviewView({ data }: { data: ReviewData }) {
   const next = addDays(data.weekStart, 7);
   const isFuture = next > data.today;
   const followed = data.sessions.filter((s) => s.followed_plan === true).length;
+  // Objetivo: días con meta en el check-in y cuántos terminaron en o sobre ella.
+  const goalDays = data.sessions.filter((s) => s.goal_amount !== null);
+  const goalsMet = goalDays.filter((s) => {
+    const pnl = data.trades.filter((t) => t.account_id === s.account_id && t.session_date === s.date).reduce((a, t) => a + t.pnl, 0);
+    return pnl >= (s.goal_amount ?? Infinity) - 1e-9;
+  }).length;
   const answered = data.sessions.filter((s) => s.followed_plan !== null).length;
 
   return (
@@ -182,7 +188,7 @@ export function ReviewView({ data }: { data: ReviewData }) {
       </Panel>
 
       {/* Números de la semana (con filtros) */}
-      <section aria-label="Resumen de la semana" className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border lg:grid-cols-5">
+      <section aria-label="Resumen de la semana" className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border lg:grid-cols-6">
         <Stat label="Operaciones" value={String(summary.n)} sub={active ? "con los filtros" : "en la semana"} />
         <Stat label="Neto" value={summary.n ? signedMoney(summary.net) : "—"} tone={summary.net} />
         <Stat label="R acumulada" value={summary.n ? rValue(summary.r) : "—"} tone={summary.r} sub={`Win rate ${percent(summary.winRate)}`} />
@@ -191,7 +197,11 @@ export function ReviewView({ data }: { data: ReviewData }) {
           label="Seguiste tu plan"
           value={answered ? `${followed}/${answered}` : "—"}
           sub="días, según tu cierre de sesión"
-          className="col-span-2 lg:col-span-1"
+        />
+        <Stat
+          label="Cumpliste tu objetivo"
+          value={goalDays.length ? `${goalsMet}/${goalDays.length}` : "—"}
+          sub={goalDays.length ? "días con meta en el check-in" : "no pusiste metas esta semana"}
         />
       </section>
 

@@ -7,6 +7,7 @@ import { Logo } from "@/components/app/logo";
 import { computeMeters } from "@/lib/rules";
 import { cn } from "@/lib/utils";
 import { useJournal } from "../journal/journal-context";
+import { GoalLine, useGoalProgress } from "../journal/goal-meter";
 import { clock, useSessionClock } from "../journal/session-timer";
 
 /** Dónde vive la ventana: una ventana PiP siempre encima, o un div flotante dentro de la página. */
@@ -229,6 +230,7 @@ function CoachPanel({
   const done = state.done.filter((i) => i < steps.length);
   const ready = steps.length > 0 && done.length === steps.length;
   const sessionClock = useSessionClock(data.mode === "live" ? data.session : null, data.rules);
+  const goal = useGoalProgress();
 
   const trades = data.mode === "live" ? liveTrades : [];
   const meters = computeMeters({
@@ -268,6 +270,7 @@ function CoachPanel({
         <Stat label="Hechas/anot." value={`${state.taken}/${annotated}`} className={missing ? "text-warn" : "text-foreground"} />
       </div>
 
+      {goal && <GoalLine progress={goal} currency={data.account.currency} />}
       {missing > 0 && (
         <p className="border-b bg-warn/10 px-3 py-1.5 text-xs text-warn">
           Te {missing === 1 ? "falta 1 operación" : `faltan ${missing} operaciones`} por anotar.

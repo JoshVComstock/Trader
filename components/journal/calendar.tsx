@@ -1,5 +1,6 @@
 "use client";
 
+import { TargetIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Panel } from "@/components/app/layout";
 import { Button } from "@/components/ui/button";
@@ -33,7 +34,7 @@ export function MonthCalendar({ weeks, today, currency }: { weeks: CalendarWeek[
   return (
     <Panel
       title="Calendario"
-      description="Toca un día para ver su historia completa. El punto indica si respetaste todas tus reglas."
+      description="Toca un día para ver su historia. El punto: respetaste tus reglas. El blanco verde: llegaste a tu objetivo."
       actions={
         selectedDay && (
           <Button variant="ghost" size="sm" onClick={() => setSelectedDay(null)}>
@@ -52,7 +53,7 @@ export function MonthCalendar({ weeks, today, currency }: { weeks: CalendarWeek[
         <div className="px-2 pb-1 text-xs text-subtle">Semana</div>
 
           {visible.map((week) => (
-            <Week key={week.cells[0].date} week={week} maxAbs={maxAbs} today={today} currency={currency} selected={selectedDay} onSelect={openDay} />
+            <Week key={week.cells[0].date} week={week} maxAbs={maxAbs} today={today} currency={currency} selected={selectedDay} onSelect={openDay} goals={data.goals} />
         ))}
       </div>
       <DayStorySheet accountId={data.account.id} date={storyDay} currency={currency} onClose={() => setStoryDay(null)} />
@@ -67,6 +68,7 @@ function Week({
   currency,
   selected,
   onSelect,
+  goals,
 }: {
   week: CalendarWeek;
   maxAbs: number;
@@ -74,8 +76,11 @@ function Week({
   currency: string;
   selected: string | null;
   onSelect: (d: string | null) => void;
+  goals: Record<string, number>;
 }) {
   const s = week.summary;
+  const withGoal = week.cells.filter((c) => c.day && goals[c.date] !== undefined);
+  const met = withGoal.filter((c) => c.day!.pnl >= goals[c.date]).length;
   const wr = s.wins + s.losses > 0 ? Math.round((s.wins / (s.wins + s.losses)) * 100) : null;
   return (
     <>
@@ -116,6 +121,12 @@ function Week({
                   )}
                   title={d.compliance_pct >= 100 ? "Respetaste todas tus reglas" : "Rompiste alguna regla"}
                 />
+                {goals[cell.date] !== undefined && (
+                  <TargetIcon
+                    className={cn("absolute top-1 right-4 size-3", d.pnl >= goals[cell.date] ? "text-gain" : "text-subtle/60")}
+                    aria-label={d.pnl >= goals[cell.date] ? "Llegaste a tu objetivo" : "No llegaste a tu objetivo"}
+                  />
+                )}
               </>
             )}
           </button>
@@ -130,6 +141,12 @@ function Week({
             <span className="num text-[11px] text-muted-foreground">
               {s.trades} op{wr !== null && ` · ${wr}%`}
             </span>
+            {withGoal.length > 0 && (
+              <span className={cn("num flex items-center gap-1 text-[11px]", met === withGoal.length ? "text-gain" : "text-muted-foreground")}>
+                <TargetIcon className="size-3" />
+                {met}/{withGoal.length} metas
+              </span>
+            )}
           </>
         ) : (
           <span className="text-[10px] text-subtle">—</span>

@@ -211,9 +211,10 @@ export function TradeForm({
       sessionOpenedAt: openedRef,
       balance,
       rules,
+      goalAmount: mode === "live" ? (session?.goal_amount ?? null) : null,
     });
     return { ...engine, tilt };
-  }, [editing, values, stakeNumber, tpNumber, signedPnl, mode, sessionTrades, sessionOpenedAt, balance, rules, psych.tilt_detector]);
+  }, [editing, values, stakeNumber, tpNumber, signedPnl, mode, sessionTrades, sessionOpenedAt, balance, rules, psych.tilt_detector, session?.goal_amount]);
 
   const entryNumber = parseNumber(values.entry_amount ?? "") ?? Number.NaN;
 

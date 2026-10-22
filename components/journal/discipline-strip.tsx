@@ -9,6 +9,7 @@ import { dayLabel } from "@/lib/format";
 import { computeMeters, type EngineTrade, type Meter } from "@/lib/rules";
 import { cn } from "@/lib/utils";
 import { useJournal } from "./journal-context";
+import { GoalMeter, useGoalProgress } from "./goal-meter";
 import { CalmSelfMessage, PauseBanner, usePause } from "./pause";
 import { plannedMinutes, SessionTimerPanel, useSessionClock } from "./session-timer";
 
@@ -44,6 +45,7 @@ function MeterBar({ meter }: { meter: Meter }) {
 export function DisciplineStrip() {
   const { data, pending, openCheckin, openCloseSession } = useJournal();
   const pause = usePause();
+  const goal = useGoalProgress();
   const { session, mode } = data;
   const sessionClock = useSessionClock(mode === "live" ? session : null, data.rules);
 
@@ -136,8 +138,13 @@ export function DisciplineStrip() {
 
   return (
     <Panel aria-label="Disciplina" title={title} description={description} actions={actions} bodyClassName="space-y-4">
-      <div className={cn("grid gap-5", sessionClock && "lg:grid-cols-[minmax(16rem,22rem)_1fr] lg:items-center")}>
-        {sessionClock && <SessionTimerPanel clock={sessionClock} />}
+      {(sessionClock || goal) && (
+        <div className={cn("grid gap-3", sessionClock && goal && "md:grid-cols-2")}>
+          {sessionClock && <SessionTimerPanel clock={sessionClock} />}
+          {goal && <GoalMeter progress={goal} currency={data.account.currency} open={session.status === "open"} />}
+        </div>
+      )}
+      <div className="grid gap-5">
         <div className={cn("grid grid-cols-2 gap-x-6 gap-y-4", visibleMeters.length === 4 ? "md:grid-cols-4" : "md:grid-cols-3")}>
           {visibleMeters.map((m) => (
             <MeterBar key={m.key} meter={m} />

@@ -5,6 +5,8 @@ import { Panel } from "@/components/app/layout";
 import { Button } from "@/components/ui/button";
 import type { CalendarWeek } from "@/lib/calc/metrics";
 import { compactMoney, signedMoney } from "@/lib/format";
+import { useState } from "react";
+import { DayStorySheet } from "./day-story";
 import { useJournal } from "./journal-context";
 
 const WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
@@ -17,7 +19,13 @@ function cellBackground(pnl: number, maxAbs: number): string | undefined {
 }
 
 export function MonthCalendar({ weeks, today, currency }: { weeks: CalendarWeek[]; today: string; currency: string }) {
-  const { selectedDay, setSelectedDay } = useJournal();
+  const { selectedDay, setSelectedDay, data } = useJournal();
+  const [storyDay, setStoryDay] = useState<string | null>(null);
+  // Tocar un día abre su historia y además filtra la tabla de abajo.
+  const openDay = (date: string | null) => {
+    setSelectedDay(date);
+    if (date) setStoryDay(date);
+  };
   const maxAbs = Math.max(0, ...weeks.flatMap((w) => w.cells.map((c) => Math.abs(c.day?.pnl ?? 0))));
   // Las semanas sin ningún día del mes (la sexta, a veces) no se muestran.
   const visible = weeks.filter((w) => w.cells.some((c) => c.inMonth));
@@ -25,7 +33,7 @@ export function MonthCalendar({ weeks, today, currency }: { weeks: CalendarWeek[
   return (
     <Panel
       title="Calendario"
-      description="Toca un día para ver sus operaciones. El punto indica si respetaste todas tus reglas."
+      description="Toca un día para ver su historia completa. El punto indica si respetaste todas tus reglas."
       actions={
         selectedDay && (
           <Button variant="ghost" size="sm" onClick={() => setSelectedDay(null)}>
@@ -44,9 +52,10 @@ export function MonthCalendar({ weeks, today, currency }: { weeks: CalendarWeek[
         <div className="px-2 pb-1 text-xs text-subtle">Semana</div>
 
           {visible.map((week) => (
-            <Week key={week.cells[0].date} week={week} maxAbs={maxAbs} today={today} currency={currency} selected={selectedDay} onSelect={setSelectedDay} />
+            <Week key={week.cells[0].date} week={week} maxAbs={maxAbs} today={today} currency={currency} selected={selectedDay} onSelect={openDay} />
         ))}
       </div>
+      <DayStorySheet accountId={data.account.id} date={storyDay} currency={currency} onClose={() => setStoryDay(null)} />
     </Panel>
   );
 }

@@ -17,6 +17,12 @@ import { parseRules } from "@/lib/schemas";
 import { createClient, type ServerClient } from "@/lib/supabase/server";
 import { localDate, monthRange } from "@/lib/time-core";
 
+/** Supabase devuelve errores como objetos planos; los convertimos en Error para ver el mensaje real. */
+function dbError(e: { code?: string; message: string; details?: string | null; hint?: string | null }): Error {
+  const extra = [e.details, e.hint].filter(Boolean).join(" · ");
+  return new Error(`[Supabase ${e.code ?? "?"}] ${e.message}${extra ? ` — ${extra}` : ""}`, { cause: e });
+}
+
 export interface Account {
   id: string;
   label: string;
@@ -95,7 +101,7 @@ export async function listAccounts(supabase: ServerClient, kinds?: AccountKind[]
     .order("created_at");
   if (kinds) q = q.in("kind", kinds);
   const { data, error } = await q;
-  if (error) throw error;
+  if (error) throw dbError(error);
   return data;
 }
 
@@ -104,13 +110,13 @@ export async function listStrategies(supabase: ServerClient): Promise<Strategy[]
     .from("strategies")
     .select("id, name, context_tf, entry_tf, notes, active")
     .order("created_at");
-  if (error) throw error;
+  if (error) throw dbError(error);
   return data;
 }
 
 export async function listRules(supabase: ServerClient): Promise<Rule[]> {
   const { data, error } = await supabase.from("rules").select("type, params, action, enabled");
-  if (error) throw error;
+  if (error) throw dbError(error);
   return parseRules(data);
 }
 
@@ -176,7 +182,7 @@ export async function getSessionTrades(supabase: ServerClient, sessionId: string
     .select(TRADE_COLUMNS)
     .eq("session_id", sessionId)
     .order("opened_at");
-  if (error) throw error;
+  if (error) throw dbError(error);
   return (data as unknown as TradeRow[]).map(toJournalTrade);
 }
 
@@ -279,10 +285,10 @@ export async function getJournalData(args: {
       .maybeSingle(),
   ]);
 
-  if (dailyRes.error) throw dailyRes.error;
-  if (tradesRes.error) throw tradesRes.error;
-  if (sessionRes.error) throw sessionRes.error;
-  if (lastRes.error) throw lastRes.error;
+  if (dailyRes.error) throw dbError(dailyRes.error);
+  if (tradesRes.error) throw dbError(tradesRes.error);
+  if (sessionRes.error) throw dbError(sessionRes.error);
+  if (lastRes.error) throw dbError(lastRes.error);
 
   const session = (sessionRes.data as Session | null) ?? null;
   const sessionTrades = session ? await getSessionTrades(supabase, session.id) : [];
@@ -317,7 +323,7 @@ export interface TradeDetail {
 export async function getTradeDetail(id: string): Promise<TradeDetail | null> {
   const { supabase } = await requireUser();
   const { data, error } = await supabase.from("trades").select(TRADE_COLUMNS).eq("id", id).maybeSingle();
-  if (error) throw error;
+  if (error) throw dbError(error);
   if (!data) return null;
   const trade = toJournalTrade(data as unknown as TradeRow);
 
@@ -332,7 +338,7 @@ export async function getTradeDetail(id: string): Promise<TradeDetail | null> {
   ]);
 
   for (const r of [accountRes, strategyRes, sessionRes, violationsRes, attachmentsRes]) {
-    if (r.error) throw r.error;
+    if (r.error) throw dbError(r.error);
   }
 
   return {

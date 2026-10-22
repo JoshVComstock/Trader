@@ -2,7 +2,7 @@
 
 import { DownloadIcon, FlaskConicalIcon, LogOutIcon, MenuIcon, MoonIcon, NotebookPenIcon, SettingsIcon, SunIcon } from "lucide-react";
 import Link from "next/link";
-import { useTheme } from "next-themes";
+import { useTheme } from "@/hooks/use-theme";
 import { signOut } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 import {

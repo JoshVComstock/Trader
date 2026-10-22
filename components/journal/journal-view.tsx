@@ -92,6 +92,8 @@ export function JournalView({ data }: { data: JournalData }) {
         calmMessages: data.calmMessages,
         lastReview: data.lastReview,
         observations: data.observations,
+        goals: data.goals,
+        lastGoal: Object.entries(data.goals).sort(([a], [b]) => b.localeCompare(a))[0]?.[1] ?? null,
       }}
     >
       {/* 1 · Barra superior */}

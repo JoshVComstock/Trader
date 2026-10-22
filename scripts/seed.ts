@@ -99,7 +99,8 @@ async function seedAccount(opts: {
         opened_at: openedAt.toISOString(),
         mood_before: opts.kind === "real" ? moodBefore : null,
         read_rules: opts.kind === "real" ? chance(0.8) : false,
-        goal_r: opts.kind === "real" ? 2 : null,
+        goal_r: opts.kind === "real" ? 3 : null,
+        goal_amount: opts.kind === "real" ? 3 : null,
       })
       .select("id")
       .single();
@@ -154,6 +155,7 @@ async function seedAccount(opts: {
         sessionOpenedAt: openedAt.toISOString(),
         balance,
         rules,
+        goalAmount: opts.kind === "real" ? 3 : null,
       });
 
       const { error: tErr } = await db.from("trades").insert({

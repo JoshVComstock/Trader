@@ -38,6 +38,7 @@ export async function checkIn(raw: unknown): Promise<ActionResult<{ sessionId: s
       mood_before: input.mood_before,
       read_rules: input.read_rules,
       goal_r: input.goal_r,
+      goal_amount: input.goal_amount,
       planned_minutes: input.planned_minutes,
     })
     .select("id")

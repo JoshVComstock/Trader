@@ -54,6 +54,10 @@ export interface JournalClientData {
   calmMessages: CalmMessage[];
   lastReview: WeeklyReview | null;
   observations: Observation[];
+  /** Objetivo de cada día del mes, para el calendario. */
+  goals: Record<string, number>;
+  /** Última meta usada, como sugerencia para el check-in. */
+  lastGoal: number | null;
 }
 
 /** Operación de la sesión con lo que necesitan el motor, la pausa y el detector de tilt. */
@@ -506,6 +510,9 @@ export function JournalProvider({ data, children }: { data: JournalClientData; c
         onOpenChange={setCheckinOpen}
         accountId={data.account.id}
         rules={data.rules}
+        stake={data.sessionTrades.at(-1)?.stake ?? data.lastTrade?.stake ?? 1}
+        balance={data.balance}
+        defaultGoal={data.lastGoal}
         lastReview={data.settings.psych.weekly_review ? data.lastReview : null}
         onDone={(mood) => {
           setCheckinOpen(false);

@@ -63,6 +63,8 @@ export interface Session {
   status: SessionStatus;
   blocked_reason: string | null;
   planned_minutes: number | null;
+  /** Objetivo del día en dólares. */
+  goal_amount: number | null;
 }
 
 export interface JournalTrade {
@@ -184,7 +186,7 @@ export async function listRules(supabase: ServerClient): Promise<Rule[]> {
 }
 
 const SESSION_COLUMNS =
-  "id, account_id, date, opened_at, closed_at, mood_before, read_rules, goal_r, followed_plan, journal, status, blocked_reason, planned_minutes";
+  "id, account_id, date, opened_at, closed_at, mood_before, read_rules, goal_r, followed_plan, journal, status, blocked_reason, planned_minutes, goal_amount";
 
 const TRADE_COLUMNS =
   "id, session_id, account_id, strategy_id, instrument, direction, with_spike, opened_at, closed_at, stake, tp, pnl, r_multiple, outcome, mood, moved_sl, in_plan, checklist, note, anxiety, entry_amount, multiplier, sessions!inner(date), rule_violations(count)";
@@ -278,6 +280,8 @@ export interface JournalData {
   /** Es domingo y todavía no revisaste esta semana. */
   reviewDue: boolean;
   observations: Observation[];
+  /** Objetivo de cada día del mes (YYYY-MM-DD → dólares), para el calendario. */
+  goals: Record<string, number>;
 }
 
 export async function getJournalData(args: {
@@ -340,6 +344,7 @@ export async function getJournalData(args: {
     lastReview,
     reviewDue,
     observations,
+    goals: {},
   };
   if (!account) return empty;
 
@@ -356,7 +361,7 @@ export async function getJournalData(args: {
           .limit(1)
           .maybeSingle();
 
-  const [dailyRes, tradesRes, sessionRes, lastRes] = await Promise.all([
+  const [dailyRes, tradesRes, sessionRes, lastRes, goalsRes] = await Promise.all([
     supabase
       .from("metrics_daily")
       .select("date, trades, wins, losses, pnl, gross_profit, gross_loss, r_sum, with_spike_trades, compliance_pct, max_drawdown")
@@ -377,6 +382,7 @@ export async function getJournalData(args: {
       .order("opened_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase.from("sessions").select("date, goal_amount").eq("account_id", account.id).gte("date", from).lte("date", to),
   ]);
 
   if (dailyRes.error) throw dbError(dailyRes.error);
@@ -399,7 +405,16 @@ export async function getJournalData(args: {
       max_drawdown: Number(d.max_drawdown),
     })),
     trades: (tradesRes.data as unknown as TradeRow[]).map(toJournalTrade),
-    session: session ? { ...session, goal_r: session.goal_r === null ? null : Number(session.goal_r) } : null,
+    session: session
+      ? {
+          ...session,
+          goal_r: session.goal_r === null ? null : Number(session.goal_r),
+          goal_amount: session.goal_amount === null ? null : Number(session.goal_amount),
+        }
+      : null,
+    goals: Object.fromEntries(
+      (goalsRes.data ?? []).filter((g) => g.goal_amount !== null).map((g) => [g.date, Number(g.goal_amount)]),
+    ),
     sessionTrades,
     lastTrade: lastRes.data ? toJournalTrade(lastRes.data as unknown as TradeRow) : null,
   };
@@ -459,7 +474,7 @@ export interface ReviewData {
   trades: ReviewTrade[];
   review: WeeklyReview | null;
   /** Días de la semana con sesión, para saber si seguiste el plan. */
-  sessions: { date: string; followed_plan: boolean | null; status: SessionStatus; journal: string | null }[];
+  sessions: { date: string; followed_plan: boolean | null; status: SessionStatus; journal: string | null; goal_amount: number | null; account_id: string }[];
 }
 
 /** Datos de la revisión de una semana (lunes a domingo), solo cuentas reales y demo. */
@@ -490,7 +505,7 @@ export async function getReviewData(requestedWeek?: string): Promise<ReviewData>
   const { data: sessions } = ids.length
     ? await supabase
         .from("sessions")
-        .select("date, followed_plan, status, journal")
+        .select("date, followed_plan, status, journal, goal_amount, account_id")
         .in("account_id", ids)
         .gte("date", start)
         .lte("date", end)
@@ -512,6 +527,6 @@ export async function getReviewData(requestedWeek?: string): Promise<ReviewData>
     strategies,
     trades,
     review: reviewRes.data ?? null,
-    sessions: sessions ?? [],
+    sessions: (sessions ?? []).map((x) => ({ ...x, goal_amount: x.goal_amount === null ? null : Number(x.goal_amount) })),
   };
 }

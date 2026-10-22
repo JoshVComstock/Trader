@@ -81,7 +81,7 @@ export async function createTrade(raw: unknown): Promise<ActionResult<CreateTrad
   const date = mode === "live" ? todayLocal() : localDate(openedAt);
   let { data: session } = await supabase
     .from("sessions")
-    .select("id, opened_at, status")
+    .select("id, opened_at, status, goal_amount")
     .eq("account_id", account.id)
     .eq("date", date)
     .maybeSingle();
@@ -93,7 +93,7 @@ export async function createTrade(raw: unknown): Promise<ActionResult<CreateTrad
     const created = await supabase
       .from("sessions")
       .insert({ account_id: account.id, user_id: user.id, date, opened_at: openedAt })
-      .select("id, opened_at, status")
+      .select("id, opened_at, status, goal_amount")
       .single();
     if (created.error) return fail("No pudimos abrir la sesión de backtesting", "unknown");
     session = created.data;
@@ -149,6 +149,7 @@ export async function createTrade(raw: unknown): Promise<ActionResult<CreateTrad
     sessionOpenedAt: session.opened_at,
     balance,
     rules,
+    goalAmount: session.goal_amount === null ? null : Number(session.goal_amount),
   });
 
   const inserted = await supabase.from("trades").insert({

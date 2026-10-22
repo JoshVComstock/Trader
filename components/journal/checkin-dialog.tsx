@@ -35,6 +35,10 @@ export function ruleSummary(rule: Rule): string {
       return `${rule.params.seconds} s de pausa entre operaciones`;
     case "max_psych_errors":
       return `Máximo ${rule.params.n} entradas por impulso`;
+    case "daily_goal":
+      return "Al llegar a tu objetivo, se acaba el día";
+    case "protect_profit":
+      return `Tras la meta, puedes devolver hasta el ${rule.params.pct}%`;
   }
 }
 
@@ -44,6 +48,9 @@ export function CheckinDialog({
   accountId,
   rules,
   lastReview,
+  stake = 1,
+  balance = 0,
+  defaultGoal = null,
   onDone,
 }: {
   open: boolean;
@@ -52,16 +59,23 @@ export function CheckinDialog({
   rules: Rule[];
   /** Lo que respondiste en la revisión del domingo; se recuerda toda la semana. */
   lastReview?: WeeklyReview | null;
+  /** Stop habitual (de la última operación), para traducir la meta a R. */
+  stake?: number;
+  balance?: number;
+  /** Meta de la sesión anterior, como sugerencia. */
+  defaultGoal?: number | null;
   onDone: (mood: Mood) => void;
 }) {
   const ruleMinutes = rules.find((r) => r.type === "max_session_minutes" && r.enabled);
   const defaultMinutes = ruleMinutes?.type === "max_session_minutes" ? ruleMinutes.params.minutes : 60;
   const [mood, setMood] = useState<Mood | null>(null);
   const [readRules, setReadRules] = useState(false);
-  const [goal, setGoal] = useState("2");
+  const [goal, setGoal] = useState(defaultGoal ? String(defaultGoal) : "");
   const [minutes, setMinutes] = useState(String(defaultMinutes));
   const [pending, start] = useTransition();
   const active = rules.filter((r) => r.enabled);
+  const goalNumber = Number(goal.replace(",", "."));
+  const goalRule = rules.find((r) => r.type === "daily_goal");
   const minutesNumber = Number(minutes);
   const customMinutes = !DURATIONS.includes(minutesNumber);
 
@@ -75,12 +89,14 @@ export function CheckinDialog({
       return;
     }
     const g = goal.trim() ? Number(goal.replace(",", ".")) : null;
+    const goalAmount = g !== null && Number.isFinite(g) && g > 0 ? g : null;
     start(async () => {
       const res = await checkIn({
         account_id: accountId,
         mood_before: mood,
         read_rules: readRules,
-        goal_r: g !== null && Number.isFinite(g) ? g : null,
+        goal_amount: goalAmount,
+        goal_r: goalAmount !== null && stake > 0 ? Math.round((goalAmount / stake) * 100) / 100 : null,
         planned_minutes: minutesNumber,
       });
       if (!res.ok) {
@@ -144,12 +160,29 @@ export function CheckinDialog({
             </div>
           </fieldset>
 
-          <div className="grid grid-cols-2 gap-4">
-            <label className="space-y-2">
-              <span className="block text-sm font-medium">Objetivo del día</span>
-              <InputGroup value={goal} onChange={(e) => setGoal(e.target.value)} inputMode="decimal" suffix="R" className="h-11" />
-            </label>
-          </div>
+          <fieldset>
+            <legend className="mb-2 flex w-full items-baseline justify-between text-sm font-medium">
+              Objetivo del día
+              <span className="text-xs font-normal text-subtle">Lo que quieres ganar hoy, en dólares</span>
+            </legend>
+            <div className="flex flex-wrap items-center gap-3">
+              <InputGroup value={goal} onChange={(e) => setGoal(e.target.value)} inputMode="decimal" prefix="+$" className="h-11 w-36" placeholder="3" />
+              {goalNumber > 0 && stake > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  = <span className="num font-semibold text-foreground">{(goalNumber / stake).toFixed(1)}R</span> con tu stop de{" "}
+                  <span className="num">${stake}</span>
+                  {balance > 0 && <span className="text-subtle"> · {((goalNumber / balance) * 100).toFixed(1)}% de tu cuenta</span>}
+                </p>
+              )}
+            </div>
+            <p className="mt-1.5 text-xs text-subtle">
+              {goalRule?.enabled
+                ? goalRule.action === "block"
+                  ? "Al llegar, la sesión se bloquea para que no devuelvas lo ganado."
+                  : "Al llegar, te avisamos que lo que sigue es arriesgar lo ganado."
+                : "Activa la regla “Objetivo del día” en Ajustes si quieres que te pare al llegar."}
+            </p>
+          </fieldset>
 
           {active.length > 0 && (
             <fieldset>

@@ -1,12 +1,13 @@
 "use client";
 
-import { CameraIcon, CheckIcon, GripHorizontalIcon, MinusIcon, PlusIcon, RotateCcwIcon, XIcon } from "lucide-react";
-import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
+import { CheckIcon, ImageIcon, PencilIcon, GripHorizontalIcon, MinusIcon, PlusIcon, RotateCcwIcon, XIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Logo } from "@/components/app/logo";
 import { computeMeters } from "@/lib/rules";
 import { cn } from "@/lib/utils";
 import { useJournal } from "../journal/journal-context";
+import { pendingCapture } from "./capture";
 import { GoalLine, useGoalProgress } from "../journal/goal-meter";
 import { clock, useSessionClock } from "../journal/session-timer";
 
@@ -99,13 +100,13 @@ export function FloatingCoach({
   host,
   onClose,
   onCapture,
-  captureReady,
+  drawing,
 }: {
   host: CoachHost;
   onClose: () => void;
   /** Captura la pantalla desde la ventana donde se hizo el clic. */
   onCapture: (win: Window) => void;
-  captureReady: boolean;
+  drawing: boolean;
 }) {
   // Si se cierra la ventana PiP con su propia X, se avisa.
   useEffect(() => {
@@ -118,15 +119,15 @@ export function FloatingCoach({
 
   if (host.kind === "pip") {
     return createPortal(
-      <CoachPanel ownerWindow={host.win} onClose={onClose} onCapture={onCapture} captureReady={captureReady} fill />,
+      <CoachPanel ownerWindow={host.win} onClose={onClose} onCapture={onCapture} drawing={drawing} fill />,
       host.win.document.body,
     );
   }
-  return <InlineFloat onClose={onClose} onCapture={onCapture} captureReady={captureReady} />;
+  return <InlineFloat onClose={onClose} onCapture={onCapture} drawing={drawing} />;
 }
 
 /** Div flotante que se arrastra por la pantalla (cuando no hay PiP). */
-function InlineFloat({ onClose, onCapture, captureReady }: { onClose: () => void; onCapture: (win: Window) => void; captureReady: boolean }) {
+function InlineFloat({ onClose, onCapture, drawing }: { onClose: () => void; onCapture: (win: Window) => void; drawing: boolean }) {
   const [pos, setPos] = useState(() => {
     try {
       const raw = window.localStorage.getItem("racha:coach:pos");
@@ -182,7 +183,7 @@ function InlineFloat({ onClose, onCapture, captureReady }: { onClose: () => void
           </IconButton>
         </span>
       </div>
-      <CoachPanel ownerWindow={window} onClose={onClose} onCapture={onCapture} captureReady={captureReady} compact={minimized} />
+      <CoachPanel ownerWindow={window} onClose={onClose} onCapture={onCapture} drawing={drawing} compact={minimized} />
     </div>
   );
 }
@@ -211,14 +212,14 @@ function CoachPanel({
   ownerWindow,
   onClose,
   onCapture,
-  captureReady,
+  drawing,
   compact = false,
   fill = false,
 }: {
   ownerWindow: Window;
   onClose: () => void;
   onCapture: (win: Window) => void;
-  captureReady: boolean;
+  drawing: boolean;
   compact?: boolean;
   fill?: boolean;
 }) {
@@ -355,9 +356,13 @@ function CoachPanel({
         </div>
       )}
 
-      {captureReady && (
-        <p className="border-t bg-brand/10 px-3 py-1.5 text-xs">Captura lista: vuelve a Racha para dibujar sobre ella.</p>
+      {drawing && (
+        <p className="flex items-center gap-1.5 border-t bg-loss/10 px-3 py-1.5 text-xs">
+          <span className="size-2 animate-pulse rounded-full bg-loss" />
+          Dibujando en vivo en Racha. Toma la captura cuando quieras.
+        </p>
       )}
+      <ReadyImage />
 
       <div className="grid grid-cols-3 gap-1.5 border-t p-2">
         <button
@@ -377,8 +382,8 @@ function CoachPanel({
           onClick={() => onCapture(ownerWindow)}
           className="flex h-10 items-center justify-center gap-1 rounded-lg border text-xs font-medium hover:bg-muted"
         >
-          <CameraIcon className="size-3.5" />
-          Capturar
+          <PencilIcon className="size-3.5" />
+          Dibujar
         </button>
         <button
           type="button"
@@ -402,6 +407,36 @@ function Stat({ label, value, className }: { label: string; value: string; class
     <div className="bg-popover px-1 py-2">
       <p className="truncate text-[10px] text-subtle">{label}</p>
       <p className={cn("num text-sm font-semibold", className)}>{value}</p>
+    </div>
+  );
+}
+
+/** "Ya está la imagen": la captura lista para la próxima operación, con miniatura. */
+function ReadyImage() {
+  const blob = useSyncExternalStore(pendingCapture.subscribe, pendingCapture.get, () => null);
+  const url = useMemo(() => (blob ? URL.createObjectURL(blob) : null), [blob]);
+  useEffect(() => () => {
+    if (url) URL.revokeObjectURL(url);
+  }, [url]);
+  if (!blob || !url) return null;
+  return (
+    <div className="flex items-center gap-2 border-t bg-gain/10 px-3 py-2">
+      {/* eslint-disable-next-line @next/next/no-img-element -- miniatura local (blob:) */}
+      <img src={url} alt="Captura lista" className="h-10 w-16 shrink-0 rounded border object-cover" />
+      <div className="min-w-0 flex-1">
+        <p className="flex items-center gap-1 text-xs font-medium text-gain">
+          <ImageIcon className="size-3.5" />
+          Ya está la imagen
+        </p>
+        <p className="text-[11px] text-muted-foreground">Se adjunta a tu próxima operación.</p>
+      </div>
+      <button
+        type="button"
+        onClick={() => pendingCapture.set(null)}
+        className="rounded-md px-1.5 py-1 text-[11px] text-subtle hover:bg-muted hover:text-foreground"
+      >
+        Quitar
+      </button>
     </div>
   );
 }

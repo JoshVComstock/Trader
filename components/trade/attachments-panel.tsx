@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { imageFromClipboard } from "@/lib/image";
 import { uploadScreenshot } from "@/lib/upload";
 import { AnnotatorDialog } from "@/components/float/annotator";
-import { captureScreen } from "@/components/float/capture";
+import { startScreenStream } from "@/components/float/capture";
 
 interface Shot {
   id: string;
@@ -29,10 +29,10 @@ export function AttachmentsPanel({ tradeId, initial, enabled }: { tradeId: strin
   const [open, setOpen] = useState<Shot | null>(null);
   const [removing, startRemove] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [captured, setCaptured] = useState<Blob | null>(null);
+  const [captured, setCaptured] = useState<MediaStream | null>(null);
 
   function capture() {
-    captureScreen().then(setCaptured, (e: unknown) => {
+    startScreenStream().then(setCaptured, (e: unknown) => {
       if (e instanceof DOMException && e.name === "NotAllowedError") return;
       toast.error(e instanceof Error ? e.message : "No pudimos capturar la pantalla");
     });
@@ -110,7 +110,7 @@ export function AttachmentsPanel({ tradeId, initial, enabled }: { tradeId: strin
         <div className="flex gap-1">
           <Button variant="ghost" size="sm" onClick={capture} title="Capturar la pantalla y dibujar encima">
             <CameraIcon />
-            Capturar pantalla
+            Dibujar en pantalla
           </Button>
           {shots.length > 0 && (
             <Button variant="ghost" size="sm" onClick={() => inputRef.current?.click()}>
@@ -171,7 +171,7 @@ export function AttachmentsPanel({ tradeId, initial, enabled }: { tradeId: strin
       />
 
       <AnnotatorDialog
-        image={captured}
+        source={captured}
         onClose={() => setCaptured(null)}
         primary={{ label: "Adjuntar a esta operación", run: (blob) => upload([blob]) }}
       />

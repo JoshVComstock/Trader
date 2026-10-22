@@ -84,7 +84,7 @@ export function SessionTimerChip({ clock: c, className }: { clock: SessionClock;
       aria-live="off"
     >
       <TimerIcon className="size-4 opacity-70" />
-      <span className="num">{label}</span>
+      <span className="num" suppressHydrationWarning>{label}</span>
     </span>
   );
 }
@@ -104,7 +104,7 @@ export function SessionTimerPanel({ clock: c }: { clock: SessionClock }) {
           {c.plannedMin ? ` · plan ${c.plannedMin} min` : ""}
         </span>
       </div>
-      <p className={cn("num mt-1 text-3xl font-semibold tracking-tight", tone(c))}>
+      <p className={cn("num mt-1 text-3xl font-semibold tracking-tight", tone(c))} suppressHydrationWarning>
         {c.remainingSec === null ? clock(c.elapsedSec) : clock(c.remainingSec)}
       </p>
       {c.plannedMin && (

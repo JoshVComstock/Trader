@@ -41,6 +41,27 @@ export async function captureScreen(win: Window = window): Promise<Blob> {
   }
 }
 
+/**
+ * Abre la transmisión de una pantalla o ventana para dibujar en vivo.
+ * Conviene elegir la VENTANA de MT5/Deriv: si eliges la pantalla donde está Racha, se ve un espejo infinito.
+ */
+export async function startScreenStream(win: Window = window): Promise<MediaStream> {
+  const media = win.navigator.mediaDevices;
+  if (!media?.getDisplayMedia) {
+    throw new Error("Este navegador no permite compartir la pantalla. Usa Chrome o Edge en computadora.");
+  }
+  return media.getDisplayMedia({
+    video: { displaySurface: "window", frameRate: 30 },
+    audio: false,
+    selfBrowserSurface: "exclude",
+  } as DisplayMediaStreamOptions);
+}
+
+/** ¿Es una transmisión en vivo? (MediaStream no existe en el servidor). */
+export function isStream(x: unknown): x is MediaStream {
+  return typeof MediaStream !== "undefined" && x instanceof MediaStream;
+}
+
 /** Captura pendiente de adjuntar a la próxima operación que registres. */
 let pending: Blob | null = null;
 const listeners = new Set<() => void>();

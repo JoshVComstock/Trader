@@ -2,6 +2,7 @@ import { cn } from "@/lib/utils";
 import type { Kpis } from "@/lib/calc/metrics";
 import { decimal, money, percent, rValue, signedMoney } from "@/lib/format";
 import type { Streak } from "@/lib/psych";
+import { RHelp } from "./r-help";
 
 function tone(value: number | null) {
   if (value === null || value === 0) return "text-foreground";
@@ -17,6 +18,7 @@ export function KpiRow({
   grossLoss,
   currency,
   streak,
+  avgStake,
 }: {
   kpis: Kpis;
   wins: number;
@@ -26,6 +28,8 @@ export function KpiRow({
   currency: string;
   /** Racha de disciplina; si viene, se muestra como quinto número. */
   streak?: Streak | null;
+  /** Stop promedio del mes, para traducir la esperanza en R a dólares. */
+  avgStake?: number | null;
 }) {
   const items = [
     {
@@ -48,9 +52,13 @@ export function KpiRow({
     },
     {
       label: "Esperanza",
+      help: true,
       value: kpis.expectancyR === null ? "—" : rValue(kpis.expectancyR),
       className: tone(kpis.expectancyR),
-      sub: "por operación",
+      sub:
+        kpis.expectancyR !== null && avgStake
+          ? `≈ ${signedMoney(kpis.expectancyR * avgStake, currency)} por operación`
+          : "por operación",
     },
   ];
 
@@ -75,7 +83,10 @@ export function KpiRow({
     >
       {items.map((it) => (
         <div key={it.label} className="bg-card px-4 py-5 sm:px-6">
-          <p className="text-sm text-muted-foreground">{it.label}</p>
+          <p className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
+            {it.label}
+            {"help" in it && it.help && <RHelp label="¿R?" />}
+          </p>
           <p className={cn("num mt-2 text-3xl font-semibold tracking-tight sm:text-4xl", it.className)}>{it.value}</p>
           <p className="num mt-1.5 truncate text-sm text-subtle">{it.sub}</p>
         </div>

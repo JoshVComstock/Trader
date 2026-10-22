@@ -12,6 +12,7 @@ import { DIRECTION_LABEL, MOOD_LABEL, OUTCOME_LABEL, type Outcome } from "@/lib/
 import { dateTimeShort, dayLabel, money, rValue } from "@/lib/format";
 import { localDate } from "@/lib/time-core";
 import { useJournal } from "./journal-context";
+import { RHelp } from "./r-help";
 import type { PendingTrade } from "./pending-store";
 
 const PAGE = 10;
@@ -105,7 +106,9 @@ export function TradesTable({ currency }: { currency: string }) {
                   <th className="px-2 py-2 font-normal">Dirección</th>
                   <th className="px-2 py-2 font-normal">Spike</th>
                   <th className="px-2 py-2 text-right font-normal">Stake</th>
-                  <th className="px-2 py-2 text-right font-normal">R</th>
+                  <th className="px-2 py-2 text-right font-normal">
+                    <RHelp label="R" className="ml-auto" />
+                  </th>
                   <th className="px-2 py-2 font-normal">Resultado</th>
                   <th className="px-2 py-2 font-normal">Estado</th>
                   <th className="w-8 px-2 py-2 font-normal"><span className="sr-only">Reglas</span></th>

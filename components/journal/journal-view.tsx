@@ -113,6 +113,7 @@ export function JournalView({ data }: { data: JournalData }) {
           grossLoss={totals.gl}
           currency={account.currency}
           streak={streak}
+          avgStake={data.trades.length ? data.trades.reduce((a, t) => a + t.stake, 0) / data.trades.length : null}
         />
 
         {data.reviewDue && mode === "live" && (

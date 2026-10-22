@@ -41,6 +41,12 @@ export interface Strategy {
   entry_tf: string;
   notes: string | null;
   active: boolean;
+  /** Pasos de la estrategia, en orden, para marcar antes de entrar. */
+  steps: string[];
+}
+
+function toStrategy(row: { id: string; name: string; context_tf: string; entry_tf: string; notes: string | null; active: boolean; steps: unknown }): Strategy {
+  return { ...row, steps: Array.isArray(row.steps) ? row.steps.filter((s): s is string => typeof s === "string") : [] };
 }
 
 export interface Session {
@@ -81,6 +87,9 @@ export interface JournalTrade {
   checklist: Checklist;
   note: string | null;
   anxiety: number | null;
+  /** Monto con el que entraste (multiplicadores). */
+  entry_amount: number | null;
+  multiplier: number | null;
   violations: number;
 }
 
@@ -112,10 +121,10 @@ export async function listAccounts(supabase: ServerClient, kinds?: AccountKind[]
 export async function listStrategies(supabase: ServerClient): Promise<Strategy[]> {
   const { data, error } = await supabase
     .from("strategies")
-    .select("id, name, context_tf, entry_tf, notes, active")
+    .select("id, name, context_tf, entry_tf, notes, active, steps")
     .order("created_at");
-  if (error) throw dbError(error);
-  return data;
+  if (error) throw error;
+  return data.map(toStrategy);
 }
 
 export async function getUserSettings(supabase: ServerClient): Promise<UserSettings> {
@@ -178,7 +187,7 @@ const SESSION_COLUMNS =
   "id, account_id, date, opened_at, closed_at, mood_before, read_rules, goal_r, followed_plan, journal, status, blocked_reason, planned_minutes";
 
 const TRADE_COLUMNS =
-  "id, session_id, account_id, strategy_id, instrument, direction, with_spike, opened_at, closed_at, stake, tp, pnl, r_multiple, outcome, mood, moved_sl, in_plan, checklist, note, anxiety, sessions!inner(date), rule_violations(count)";
+  "id, session_id, account_id, strategy_id, instrument, direction, with_spike, opened_at, closed_at, stake, tp, pnl, r_multiple, outcome, mood, moved_sl, in_plan, checklist, note, anxiety, entry_amount, multiplier, sessions!inner(date), rule_violations(count)";
 
 interface TradeRow {
   id: string;
@@ -201,6 +210,8 @@ interface TradeRow {
   checklist: unknown;
   note: string | null;
   anxiety: number | null;
+  entry_amount: number | null;
+  multiplier: number | null;
   sessions: { date: string };
   rule_violations: { count: number }[];
 }
@@ -228,6 +239,8 @@ function toJournalTrade(row: TradeRow): JournalTrade {
     checklist: toChecklist(row.checklist),
     note: row.note,
     anxiety: row.anxiety,
+    entry_amount: row.entry_amount === null ? null : Number(row.entry_amount),
+    multiplier: row.multiplier,
     violations: row.rule_violations[0]?.count ?? 0,
   };
 }
@@ -411,7 +424,7 @@ export async function getTradeDetail(id: string): Promise<TradeDetail | null> {
   const [accountRes, strategyRes, sessionRes, violationsRes, attachmentsRes] = await Promise.all([
     supabase.from("accounts").select("id, label, kind, currency, start_balance, broker").eq("id", trade.account_id).single(),
     trade.strategy_id
-      ? supabase.from("strategies").select("id, name, context_tf, entry_tf, notes, active").eq("id", trade.strategy_id).maybeSingle()
+      ? supabase.from("strategies").select("id, name, context_tf, entry_tf, notes, active, steps").eq("id", trade.strategy_id).maybeSingle()
       : Promise.resolve({ data: null, error: null }),
     supabase.from("sessions").select(SESSION_COLUMNS).eq("id", trade.session_id).single(),
     supabase.from("rule_violations").select("id, rule_type, message, created_at").eq("trade_id", id).order("created_at"),
@@ -425,7 +438,7 @@ export async function getTradeDetail(id: string): Promise<TradeDetail | null> {
   return {
     trade,
     account: accountRes.data!,
-    strategy: strategyRes.data ?? null,
+    strategy: strategyRes.data ? toStrategy(strategyRes.data) : null,
     session: sessionRes.data as Session,
     violations: violationsRes.data ?? [],
     attachments: attachmentsRes.data ?? [],
@@ -463,7 +476,7 @@ export async function getReviewData(requestedWeek?: string): Promise<ReviewData>
     supabase
       .from("trades")
       .select(
-        "id, session_id, account_id, strategy_id, instrument, direction, with_spike, opened_at, closed_at, stake, tp, pnl, r_multiple, outcome, mood, moved_sl, in_plan, checklist, note, anxiety, sessions!inner(date), rule_violations(rule_type), accounts!inner(label, kind)",
+        "id, session_id, account_id, strategy_id, instrument, direction, with_spike, opened_at, closed_at, stake, tp, pnl, r_multiple, outcome, mood, moved_sl, in_plan, checklist, note, anxiety, entry_amount, multiplier, sessions!inner(date), rule_violations(rule_type), accounts!inner(label, kind)",
       )
       .in("accounts.kind", kindsForMode("live"))
       .gte("sessions.date", start)

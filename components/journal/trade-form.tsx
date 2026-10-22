@@ -25,6 +25,7 @@ import { fromLocalInput } from "@/lib/local-input";
 import { evaluateTrade, type EngineTrade, type Rule } from "@/lib/rules";
 import { tradeInputSchema, type TradeInput } from "@/lib/schemas";
 import { localDate } from "@/lib/time-core";
+import { ResultExplainer, RHelp } from "./r-help";
 import { SessionTimerChip, useSessionClock } from "./session-timer";
 
 export interface TradeFormValues {
@@ -44,6 +45,9 @@ export interface TradeFormValues {
   checklist: Checklist;
   /** "" o "1"…"5". */
   anxiety: string;
+  /** Monto de entrada con multiplicador. */
+  entry_amount: string;
+  multiplier: string;
 }
 
 function parseNumber(value: string): number | null {
@@ -53,8 +57,23 @@ function parseNumber(value: string): number | null {
   return Number.isFinite(n) ? n : Number.NaN;
 }
 
+/**
+ * En el formulario el monto ganado o perdido se escribe sin signo ("¿cuánto ganaste?": 3.20);
+ * el resultado elegido le pone el signo.
+ */
+export function signedAmount(result: Outcome | "" | undefined, raw: string): number | null {
+  const n = parseNumber(raw);
+  if (n === null) return null;
+  if (!Number.isFinite(n)) return Number.NaN;
+  if (result === "win") return Math.abs(n);
+  if (result === "loss") return -Math.abs(n);
+  if (result === "tie") return 0;
+  return n;
+}
+
 /** Formulario (strings) → payload. El mismo esquema Zod del servidor valida el resultado. */
 export function toPayload(v: TradeFormValues): unknown {
+  const multiplier = parseNumber(v.multiplier ?? "");
   return {
     id: v.id,
     account_id: v.account_id,
@@ -65,12 +84,14 @@ export function toPayload(v: TradeFormValues): unknown {
     strategy_id: v.strategy_id || null,
     mood: v.mood,
     tp: parseNumber(v.tp),
-    pnl: parseNumber(v.pnl),
+    pnl: v.result === "tie" ? 0 : signedAmount(v.result, v.pnl),
     opened_at: v.opened_at ? fromLocalInput(v.opened_at) : null,
     closed_at: v.closed_at ? fromLocalInput(v.closed_at) : null,
     note: v.note.trim() || null,
     checklist: v.checklist,
     anxiety: v.anxiety ? Number(v.anxiety) : null,
+    entry_amount: parseNumber(v.entry_amount ?? ""),
+    multiplier: multiplier === null ? null : Math.round(multiplier),
   };
 }
 
@@ -101,6 +122,7 @@ export function TradeForm({
   session = null,
   psych = defaultPsychFlags(),
   observations = [],
+  initialFile = null,
   onSubmit,
   onCancel,
 }: {
@@ -121,6 +143,8 @@ export function TradeForm({
   psych?: PsychFlags;
   /** Zonas y patrones anotados, para recordarlos al elegir el índice. */
   observations?: Observation[];
+  /** Captura ya hecha (desde la ventana flotante) para adjuntar a esta operación. */
+  initialFile?: Blob | null;
   onSubmit: (payload: TradeInput, file: Blob | null) => void;
   onCancel: () => void;
 }) {
@@ -133,9 +157,9 @@ export function TradeForm({
   });
   const { control, register, handleSubmit, setValue, formState } = form;
   const values = useWatch({ control });
-  const [file, setFile] = useState<Blob | null>(null);
+  const [file, setFile] = useState<Blob | null>(initialFile);
   const [preview, setPreview] = useState<string | null>(null);
-  const [detailsOpen, setDetailsOpen] = useState(editing || mode === "backtest");
+  const [detailsOpen, setDetailsOpen] = useState(editing);
   const errors = formState.errors;
   const sessionClock = useSessionClock(session, rules);
 
@@ -149,6 +173,16 @@ export function TradeForm({
 
   const stakeNumber = parseNumber(values.stake ?? "") ?? Number.NaN;
   const tpNumber = parseNumber(values.tp ?? "");
+  // P/L con signo según el resultado; null si todavía no se escribió.
+  const typedPnl = values.result === "tie" ? 0 : signedAmount(values.result, values.pnl ?? "");
+  const signedPnl =
+    typedPnl !== null && Number.isFinite(typedPnl)
+      ? typedPnl
+      : values.result === "loss" && stakeNumber > 0
+        ? -stakeNumber
+        : values.result === "win" && tpNumber !== null && Number.isFinite(tpNumber)
+          ? tpNumber
+          : null;
   const withSpike =
     values.instrument && values.direction ? isWithSpike(values.instrument, values.direction) : null;
 
@@ -158,11 +192,7 @@ export function TradeForm({
     const openedAt = values.opened_at ? fromLocalInput(values.opened_at) : new Date().toISOString();
     if (!openedAt) return null;
     const ctx = sessionTrades(mode === "backtest" ? localDate(openedAt) : null);
-    const pnlOverride = parseNumber(values.pnl ?? "");
-    const pnl =
-      pnlOverride !== null && Number.isFinite(pnlOverride)
-        ? pnlOverride
-        : defaultPnl(values.result, stakeNumber, tpNumber !== null && Number.isFinite(tpNumber) ? tpNumber : null);
+    const pnl = signedPnl ?? defaultPnl(values.result, stakeNumber, tpNumber !== null && Number.isFinite(tpNumber) ? tpNumber : null);
     const openedRef = mode === "backtest" ? (ctx.openedAt && ctx.openedAt < openedAt ? ctx.openedAt : openedAt) : sessionOpenedAt;
     if (!openedRef) return null;
     const candidateSpike = values.instrument && values.direction ? isWithSpike(values.instrument, values.direction) : true;
@@ -183,7 +213,7 @@ export function TradeForm({
       rules,
     });
     return { ...engine, tilt };
-  }, [editing, values, stakeNumber, tpNumber, mode, sessionTrades, sessionOpenedAt, balance, rules, psych.tilt_detector]);
+  }, [editing, values, stakeNumber, tpNumber, signedPnl, mode, sessionTrades, sessionOpenedAt, balance, rules, psych.tilt_detector]);
 
   const submit = handleSubmit((payload) => onSubmit(payload, file));
   const submitted = formState.isSubmitted;
@@ -217,7 +247,6 @@ export function TradeForm({
       if (img) {
         e.preventDefault();
         setFile(img);
-        setDetailsOpen(true);
       }
     }
     window.addEventListener("paste", onPaste);
@@ -337,63 +366,75 @@ export function TradeForm({
         </FormSection>
 
         {/* 3 · Riesgo, estado y estrategia */}
-        <FormSection step={3} title="Riesgo y estado">
-          <div className="grid gap-4 sm:grid-cols-[11rem_minmax(0,1fr)]">
+        {/* 3 · Montos (multiplicadores) */}
+        <FormSection step={3} title="Montos" hint={<RHelp />}>
+          <div className="grid gap-3 sm:grid-cols-3">
             <label className="block space-y-1.5">
-              <span className="block text-sm text-muted-foreground">Stake (riesgo)</span>
-              <InputGroup
-                prefix="$"
-                {...register("stake")}
-                inputMode="decimal"
-                autoComplete="off"
-                className="h-11"
-                aria-invalid={Boolean(errors.stake)}
-              />
+              <span className="block text-sm text-muted-foreground">Inversión (entrada)</span>
+              <InputGroup prefix="$" {...register("entry_amount")} inputMode="decimal" autoComplete="off" placeholder="10" className="h-11" aria-invalid={Boolean(errors.entry_amount)} />
+              <FieldError message={errors.entry_amount?.message} />
+            </label>
+            <label className="block space-y-1.5">
+              <span className="block text-sm text-muted-foreground">Multiplicador</span>
+              <InputGroup prefix="×" {...register("multiplier")} inputMode="numeric" autoComplete="off" placeholder="Opcional" className="h-11" aria-invalid={Boolean(errors.multiplier)} />
+              <FieldError message={errors.multiplier?.message} />
+            </label>
+            <label className="block space-y-1.5">
+              <span className="block text-sm text-muted-foreground">Stop (lo que aceptas perder)</span>
+              <InputGroup prefix="$" {...register("stake")} inputMode="decimal" autoComplete="off" className="h-11" aria-invalid={Boolean(errors.stake)} />
               {riskHint && <span className="num block text-xs text-subtle">{riskHint}</span>}
               <FieldError message={errors.stake?.message} />
             </label>
-            <div className="space-y-1.5">
-              <span className="block text-sm text-muted-foreground">Cómo te sentías</span>
-              <Controller
-                control={control}
-                name="mood"
-                render={({ field }) => (
-                  <Segmented
-                    aria-label="Cómo te sentías"
-                    value={field.value}
-                    options={MOODS.map((m) => ({ value: m, label: MOOD_LABEL[m] }))}
-                    onChange={(m) => {
-                      field.onChange(m);
-                      setValue("checklist.calm", m === "tranquilo");
-                    }}
-                    className="flex w-full [&>button]:h-10"
-                  />
-                )}
-              />
-            </div>
           </div>
 
-          {activeStrategies.length > 0 && (
-            <div className="mt-4 space-y-1.5">
-              <span className="block text-sm text-muted-foreground">Estrategia</span>
-              <Controller
-                control={control}
-                name="strategy_id"
-                render={({ field }) => (
-                  <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Estrategia">
-                    {activeStrategies.map((s) => (
-                      <Choice key={s.id} selected={field.value === s.id} onClick={() => field.onChange(s.id)}>
-                        {s.name}
-                      </Choice>
-                    ))}
-                    <Choice selected={field.value === ""} onClick={() => field.onChange("")}>
-                      Ninguna
-                    </Choice>
-                  </div>
-                )}
+          {values.result === "win" || values.result === "loss" ? (
+            <label className="mt-4 block space-y-1.5">
+              <span className="block text-sm font-medium">
+                {values.result === "win" ? "¿Cuánto ganaste con el spike?" : "¿Cuánto perdiste?"}
+              </span>
+              <InputGroup
+                prefix={values.result === "win" ? "+$" : "−$"}
+                {...register("pnl")}
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder={values.result === "loss" && stakeNumber > 0 ? String(stakeNumber) : "0.00"}
+                className={cn("h-12 text-lg", values.result === "win" ? "border-gain/50" : "border-loss/40")}
+                inputClassName="text-lg"
+                aria-invalid={Boolean(errors.pnl)}
               />
-            </div>
-          )}
+              <span className="block text-xs text-subtle">
+                {values.result === "win"
+                  ? "Escribe lo que te pagó el spike, aunque no haya llegado a ningún TP."
+                  : "Si lo dejas vacío, cuenta tu stop completo."}
+              </span>
+              <FieldError message={errors.pnl?.message} />
+            </label>
+          ) : null}
+
+          <ResultExplainer result={values.result ?? ""} pnl={signedPnl} stake={stakeNumber} currency={currency} />
+        </FormSection>
+
+        {/* 4 · Estado y estrategia */}
+        <FormSection step={4} title="Estado y estrategia">
+          <div className="space-y-1.5">
+            <span className="block text-sm text-muted-foreground">Cómo te sentías</span>
+            <Controller
+              control={control}
+              name="mood"
+              render={({ field }) => (
+                <Segmented
+                  aria-label="Cómo te sentías"
+                  value={field.value}
+                  options={MOODS.map((m) => ({ value: m, label: MOOD_LABEL[m] }))}
+                  onChange={(m) => {
+                    field.onChange(m);
+                    setValue("checklist.calm", m === "tranquilo");
+                  }}
+                  className="flex w-full [&>button]:h-10"
+                />
+              )}
+            />
+          </div>
 
           {psych.anxiety_scale && (
             <div className="mt-4 space-y-1.5">
@@ -426,6 +467,28 @@ export function TradeForm({
             </div>
           )}
 
+          {activeStrategies.length > 0 && (
+            <div className="mt-4 space-y-1.5">
+              <span className="block text-sm text-muted-foreground">Estrategia</span>
+              <Controller
+                control={control}
+                name="strategy_id"
+                render={({ field }) => (
+                  <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Estrategia">
+                    {activeStrategies.map((s) => (
+                      <Choice key={s.id} selected={field.value === s.id} onClick={() => field.onChange(s.id)}>
+                        {s.name}
+                      </Choice>
+                    ))}
+                    <Choice selected={field.value === ""} onClick={() => field.onChange("")}>
+                      Ninguna
+                    </Choice>
+                  </div>
+                )}
+              />
+            </div>
+          )}
+
           {mode === "backtest" && (
             <label className="mt-4 block space-y-1.5">
               <span className="flex items-baseline justify-between text-sm text-muted-foreground">
@@ -438,8 +501,8 @@ export function TradeForm({
           )}
         </FormSection>
 
-        {/* 4 · Checklist */}
-        <FormSection step={4} title="Checklist" hint="Desmarca lo que no se cumplió">
+        {/* 5 · Checklist */}
+        <FormSection step={5} title="Checklist" hint="Desmarca lo que no se cumplió">
           <div className="grid gap-3 sm:grid-cols-3">
             {CHECKLIST_GROUPS.map((group) => (
               <div key={group.title} className="rounded-lg border bg-muted/20 p-2">
@@ -467,32 +530,39 @@ export function TradeForm({
           </div>
         </FormSection>
 
+        {/* 6 · Captura y descripción: siempre a la vista, las dos opcionales */}
+        <FormSection step={6} title="Captura y descripción" hint="Opcional">
+          <div className={cn("grid gap-3", !editing && "sm:grid-cols-2")}>
+            {!editing && (
+              <div className="space-y-1.5">
+                <span className="block text-sm text-muted-foreground">Foto de la operación</span>
+                <ShotPicker file={file} preview={preview} onFile={setFile} />
+              </div>
+            )}
+            <label className="block space-y-1.5">
+              <span className="block text-sm text-muted-foreground">Descripción</span>
+              <Textarea {...register("note")} rows={editing ? 3 : 5} placeholder="Qué viste, por qué entraste, qué harías distinto" />
+            </label>
+          </div>
+        </FormSection>
+
         {/* Más detalle */}
         <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen} className="rounded-lg border">
           <CollapsibleTrigger className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/40">
             <span>
               Más detalle
-              <span className="ml-2 font-normal text-subtle">TP, P/L real, horas, nota, captura</span>
+              <span className="ml-2 font-normal text-subtle">TP y horas</span>
             </span>
             <ChevronDownIcon className={cn("size-4 transition-transform", detailsOpen && "rotate-180")} />
           </CollapsibleTrigger>
           <CollapsibleContent className="space-y-4 border-t px-4 pt-4 pb-4">
-            <div className="grid grid-cols-2 gap-3">
-              <label className="block space-y-1.5">
-                <span className="flex items-baseline justify-between text-sm text-muted-foreground">
-                  TP {tpHint && <span className="num text-xs text-subtle">{tpHint}</span>}
-                </span>
-                <InputGroup prefix="$" {...register("tp")} inputMode="decimal" aria-invalid={Boolean(errors.tp)} />
-                <FieldError message={errors.tp?.message} />
-              </label>
-              <label className="block space-y-1.5">
-                <span className="flex items-baseline justify-between text-sm text-muted-foreground">
-                  P/L real <span className="text-xs text-subtle">Opcional</span>
-                </span>
-                <InputGroup prefix="$" {...register("pnl")} inputMode="decimal" placeholder="Según SL/TP" aria-invalid={Boolean(errors.pnl)} />
-                <FieldError message={errors.pnl?.message} />
-              </label>
-            </div>
+            <label className="block max-w-56 space-y-1.5">
+              <span className="flex items-baseline justify-between text-sm text-muted-foreground">
+                TP (si pusiste uno) {tpHint && <span className="num text-xs text-subtle">{tpHint}</span>}
+              </span>
+              <InputGroup prefix="$" {...register("tp")} inputMode="decimal" placeholder="Opcional" aria-invalid={Boolean(errors.tp)} />
+              <FieldError message={errors.tp?.message} />
+            </label>
 
             <div className="grid grid-cols-2 gap-3">
               {mode === "live" && (
@@ -511,20 +581,6 @@ export function TradeForm({
                 <FieldError message={errors.closed_at?.message} />
               </label>
             </div>
-
-            <label className="block space-y-1.5">
-              <span className="block text-sm text-muted-foreground">Nota</span>
-              <Textarea {...register("note")} rows={3} placeholder="Qué viste, qué sentiste, qué harías distinto" />
-            </label>
-
-            {!editing && (
-              <div className="space-y-1.5">
-                <span className="flex items-baseline justify-between text-sm text-muted-foreground">
-                  Captura <span className="text-xs text-subtle">También puedes pegar con Ctrl+V</span>
-                </span>
-                <ShotPicker file={file} preview={preview} onFile={setFile} />
-              </div>
-            )}
           </CollapsibleContent>
         </Collapsible>
       </div>

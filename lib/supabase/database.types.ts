@@ -161,28 +161,28 @@ isOneToOne: false
                   ]
                 },"strategies": {
                   Row: {
-                    "active": boolean,"context_tf": string,"created_at": string,"entry_tf": string,"id": string,"name": string,"notes": string | null,"user_id": string
+                    "active": boolean,"context_tf": string,"created_at": string,"entry_tf": string,"id": string,"name": string,"notes": string | null,"steps": NonNullable<Json>,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "active"?: boolean,"context_tf"?: string,"created_at"?: string,"entry_tf"?: string,"id"?: string,"name": string,"notes"?: string | null,"user_id"?: string
+                    "active"?: boolean,"context_tf"?: string,"created_at"?: string,"entry_tf"?: string,"id"?: string,"name": string,"notes"?: string | null,"steps"?: NonNullable<Json>,"user_id"?: string
                   }
                   Update: {
-                    "active"?: boolean,"context_tf"?: string,"created_at"?: string,"entry_tf"?: string,"id"?: string,"name"?: string,"notes"?: string | null,"user_id"?: string
+                    "active"?: boolean,"context_tf"?: string,"created_at"?: string,"entry_tf"?: string,"id"?: string,"name"?: string,"notes"?: string | null,"steps"?: NonNullable<Json>,"user_id"?: string
                   }
                   Relationships: [
                     
                   ]
                 },"trades": {
                   Row: {
-                    "account_id": string,"anxiety": number | null,"checklist": NonNullable<Json>,"closed_at": string | null,"created_at": string,"direction": Database["public"]['Enums']["trade_direction"],"id": string,"in_plan": boolean,"instrument": string,"mood": Database["public"]['Enums']["mood"] | null,"moved_sl": boolean,"note": string | null,"opened_at": string,"outcome": Database["public"]['Enums']["trade_outcome"],"pnl": number,"r_multiple": number,"session_id": string,"stake": number,"strategy_id": string | null,"tp": number | null,"user_id": string,"with_spike": boolean
+                    "account_id": string,"anxiety": number | null,"checklist": NonNullable<Json>,"closed_at": string | null,"created_at": string,"direction": Database["public"]['Enums']["trade_direction"],"entry_amount": number | null,"id": string,"in_plan": boolean,"instrument": string,"mood": Database["public"]['Enums']["mood"] | null,"moved_sl": boolean,"multiplier": number | null,"note": string | null,"opened_at": string,"outcome": Database["public"]['Enums']["trade_outcome"],"pnl": number,"r_multiple": number,"session_id": string,"stake": number,"strategy_id": string | null,"tp": number | null,"user_id": string,"with_spike": boolean
                   }
                   ComputedFields: never
                   Insert: {
-                    "account_id": string,"anxiety"?: number | null,"checklist"?: NonNullable<Json>,"closed_at"?: string | null,"created_at"?: string,"direction": Database["public"]['Enums']["trade_direction"],"id"?: string,"in_plan"?: boolean,"instrument": string,"mood"?: Database["public"]['Enums']["mood"] | null,"moved_sl"?: boolean,"note"?: string | null,"opened_at"?: string,"outcome": Database["public"]['Enums']["trade_outcome"],"pnl": number,"r_multiple": number,"session_id": string,"stake": number,"strategy_id"?: string | null,"tp"?: number | null,"user_id"?: string,"with_spike": boolean
+                    "account_id": string,"anxiety"?: number | null,"checklist"?: NonNullable<Json>,"closed_at"?: string | null,"created_at"?: string,"direction": Database["public"]['Enums']["trade_direction"],"entry_amount"?: number | null,"id"?: string,"in_plan"?: boolean,"instrument": string,"mood"?: Database["public"]['Enums']["mood"] | null,"moved_sl"?: boolean,"multiplier"?: number | null,"note"?: string | null,"opened_at"?: string,"outcome": Database["public"]['Enums']["trade_outcome"],"pnl": number,"r_multiple": number,"session_id": string,"stake": number,"strategy_id"?: string | null,"tp"?: number | null,"user_id"?: string,"with_spike": boolean
                   }
                   Update: {
-                    "account_id"?: string,"anxiety"?: number | null,"checklist"?: NonNullable<Json>,"closed_at"?: string | null,"created_at"?: string,"direction"?: Database["public"]['Enums']["trade_direction"],"id"?: string,"in_plan"?: boolean,"instrument"?: string,"mood"?: Database["public"]['Enums']["mood"] | null,"moved_sl"?: boolean,"note"?: string | null,"opened_at"?: string,"outcome"?: Database["public"]['Enums']["trade_outcome"],"pnl"?: number,"r_multiple"?: number,"session_id"?: string,"stake"?: number,"strategy_id"?: string | null,"tp"?: number | null,"user_id"?: string,"with_spike"?: boolean
+                    "account_id"?: string,"anxiety"?: number | null,"checklist"?: NonNullable<Json>,"closed_at"?: string | null,"created_at"?: string,"direction"?: Database["public"]['Enums']["trade_direction"],"entry_amount"?: number | null,"id"?: string,"in_plan"?: boolean,"instrument"?: string,"mood"?: Database["public"]['Enums']["mood"] | null,"moved_sl"?: boolean,"multiplier"?: number | null,"note"?: string | null,"opened_at"?: string,"outcome"?: Database["public"]['Enums']["trade_outcome"],"pnl"?: number,"r_multiple"?: number,"session_id"?: string,"stake"?: number,"strategy_id"?: string | null,"tp"?: number | null,"user_id"?: string,"with_spike"?: boolean
                   }
                   Relationships: [
                     {

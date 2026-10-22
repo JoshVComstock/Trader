@@ -160,11 +160,14 @@ function newTradeValues(
     note: "",
     checklist,
     anxiety: "",
+    entry_amount: numberString(prev?.entry_amount ?? null),
+    multiplier: numberString(prev?.multiplier ?? null),
   };
 }
 
 export function payloadToValues(p: TradeInput): TradeFormValues {
   const expected = defaultPnl(p.result, p.stake, p.tp);
+  const amount = p.pnl === null || p.pnl === expected && p.result !== "win" ? "" : numberString(Math.abs(p.pnl));
   return {
     id: p.id,
     account_id: p.account_id,
@@ -175,12 +178,14 @@ export function payloadToValues(p: TradeInput): TradeFormValues {
     strategy_id: p.strategy_id ?? "",
     mood: p.mood,
     tp: numberString(p.tp),
-    pnl: p.pnl !== null && p.pnl !== expected ? numberString(p.pnl) : "",
+    pnl: amount,
     opened_at: p.opened_at ? toLocalInput(p.opened_at) : "",
     closed_at: p.closed_at ? toLocalInput(p.closed_at) : "",
     note: p.note ?? "",
     checklist: p.checklist,
     anxiety: p.anxiety ? String(p.anxiety) : "",
+    entry_amount: numberString(p.entry_amount),
+    multiplier: numberString(p.multiplier),
   };
 }
 
@@ -302,7 +307,7 @@ export function JournalProvider({ data, children }: { data: JournalClientData; c
         return;
       }
       if (s.status === "closed") {
-        toast.info("Cerraste la sesión de hoy", { description: "Puedes reabrirla desde la tira de disciplina." });
+        toast.info("Cerraste la sesión de hoy", { description: "Se vuelve a abrir mañana. Lo que no operaste hoy no se pierde." });
         return;
       }
       if (data.settings.psych.pause_after_loss) {

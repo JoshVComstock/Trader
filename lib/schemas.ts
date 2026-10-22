@@ -47,8 +47,18 @@ export const tradeInputSchema = z
     checklist: checklistSchema,
     /** Ansiedad / ganas de recuperar, 1–5. Opcional: se puede apagar en Ajustes. */
     anxiety: z.number().int().min(1).max(5).nullable().default(null),
+    /** Monto de entrada con multiplicador (ej. $10). El riesgo real es `stake` (tu stop). */
+    entry_amount: positiveMoney.nullable().default(null),
+    multiplier: z.number().int("Número entero").min(1).max(10000).nullable().default(null),
   })
   .superRefine((v, ctx) => {
+    // Con multiplicadores el spike paga lo que paga: si ganaste, hay que escribir cuánto.
+    if (v.result === "win" && v.pnl === null && v.tp === null) {
+      ctx.addIssue({ code: "custom", path: ["pnl"], message: "Escribe cuánto ganaste" });
+    }
+    if (v.entry_amount !== null && v.stake > v.entry_amount) {
+      ctx.addIssue({ code: "custom", path: ["stake"], message: "El stop no puede ser mayor que lo que invertiste" });
+    }
     if (v.pnl !== null) {
       const sign = Math.sign(v.pnl);
       const expected = v.result === "win" ? 1 : v.result === "loss" ? -1 : 0;
@@ -110,6 +120,7 @@ export const strategySchema = z.object({
   entry_tf: z.string().trim().min(1).max(10),
   notes: z.string().trim().max(2000).nullable(),
   active: z.boolean(),
+  steps: z.array(z.string().trim().min(1, "Paso vacío").max(80)).max(12, "Máximo 12 pasos").default([]),
 });
 export type StrategyInput = z.infer<typeof strategySchema>;
 

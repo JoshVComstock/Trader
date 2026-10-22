@@ -27,7 +27,7 @@ function lockedError(message: string | undefined) {
     return fail("La sesión de hoy está bloqueada por tus reglas. Mañana se vuelve a abrir.", "session_blocked");
   }
   if (message?.includes("SESSION_CLOSED")) {
-    return fail("Cerraste esta sesión. Reábrela si de verdad quieres seguir.", "session_closed");
+    return fail("Cerraste la sesión de hoy. Se vuelve a abrir mañana.", "session_closed");
   }
   return null;
 }
@@ -168,6 +168,8 @@ export async function createTrade(raw: unknown): Promise<ActionResult<CreateTrad
     checklist: input.checklist,
     note: input.note || null,
     anxiety: input.anxiety,
+    entry_amount: input.entry_amount,
+    multiplier: input.multiplier,
     ...derived,
   });
   if (inserted.error) {
@@ -234,6 +236,8 @@ export async function updateTrade(raw: unknown): Promise<ActionResult<{ tradeId:
       checklist: input.checklist,
       note: input.note || null,
       anxiety: input.anxiety,
+    entry_amount: input.entry_amount,
+    multiplier: input.multiplier,
       ...deriveTrade({
         instrument: input.instrument,
         direction: input.direction,

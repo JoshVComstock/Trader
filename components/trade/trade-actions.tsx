@@ -30,12 +30,15 @@ function toValues(t: JournalTrade): TradeFormValues {
     strategy_id: t.strategy_id ?? "",
     mood: t.mood ?? "tranquilo",
     tp: str(t.tp),
-    pnl: t.pnl !== expected ? str(t.pnl) : "",
+    // Sin signo: el resultado se lo pone. Una pérdida del stop exacto queda vacía.
+    pnl: t.outcome === "tie" || (t.outcome === "loss" && t.pnl === expected) ? "" : str(Math.abs(t.pnl)),
     opened_at: toLocalInput(t.opened_at),
     closed_at: t.closed_at ? toLocalInput(t.closed_at) : "",
     note: t.note ?? "",
     checklist: t.checklist,
     anxiety: t.anxiety ? String(t.anxiety) : "",
+    entry_amount: str(t.entry_amount),
+    multiplier: str(t.multiplier),
   };
 }
 

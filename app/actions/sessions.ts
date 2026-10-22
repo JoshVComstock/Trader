@@ -48,7 +48,7 @@ export async function checkIn(raw: unknown): Promise<ActionResult<{ sessionId: s
   return ok({ sessionId: data.id });
 }
 
-/** Cierre de sesión con reflexión. Una sesión bloqueada guarda la reflexión pero sigue bloqueada. */
+/** Cierre de sesión con reflexión. Es definitivo hasta mañana. Una bloqueada guarda la reflexión y sigue bloqueada. */
 export async function closeSession(raw: unknown): Promise<ActionResult> {
   const parsed = closeSessionSchema.safeParse(raw);
   if (!parsed.success) return fail("Revisa el cierre", "validation", zodFieldErrors(parsed.error.issues));
@@ -78,15 +78,7 @@ export async function closeSession(raw: unknown): Promise<ActionResult> {
 }
 
 /** Reabre una sesión cerrada a mano. Una bloqueada no se reabre: la base lo impide. */
-export async function reopenSession(sessionId: string): Promise<ActionResult> {
-  const { supabase } = await requireUser();
-  const { data: session } = await supabase.from("sessions").select("id, status").eq("id", sessionId).maybeSingle();
-  if (!session) return fail("No encontramos la sesión", "not_found");
-  if (session.status === "blocked") {
-    return fail("Una sesión bloqueada por tus reglas no se reabre.", "session_blocked");
-  }
-  const { error } = await supabase.from("sessions").update({ status: "open", closed_at: null }).eq("id", sessionId);
-  if (error) return fail("No pudimos reabrir la sesión", "unknown");
-  revalidateJournal();
-  return ok(undefined);
-}
+/**
+ * Una sesión cerrada en vivo no se reabre: se vuelve a operar mañana. La base lo impide también
+ * (trigger `sessions_guard`), así que no se puede saltar llamando a la API directo.
+ */

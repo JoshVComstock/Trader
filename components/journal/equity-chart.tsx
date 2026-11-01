@@ -4,6 +4,8 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { Panel } from "@/components/app/layout";
 import type { EquityPoint } from "@/lib/calc/metrics";
 import { inLaPaz, money } from "@/lib/format";
+import { Private } from "@/components/app/private";
+import { usePrivacy } from "@/hooks/use-privacy";
 
 function shortDate(date: string) {
   return inLaPaz(`${date}T16:00:00Z`, "d MMM");
@@ -28,7 +30,7 @@ function TooltipBox({
     <div className="rounded-lg border bg-popover px-3 py-2 text-xs shadow-md">
       <p className="text-muted-foreground">{shortDate(p.date)}</p>
       <p className="num mt-0.5 font-medium">
-        {field === "equity" ? money(p.equity, currency) : p.drawdown === 0 ? "En máximos" : money(p.drawdown, currency)}
+        <Private><Private>{field === "equity" ? money(p.equity, currency) : p.drawdown === 0 ? "En máximos" : money(p.drawdown, currency)}</Private></Private>
       </p>
     </div>
   );
@@ -36,6 +38,7 @@ function TooltipBox({
 
 /** Curva de capital arriba y drawdown desde el pico abajo, con el mismo eje de tiempo. */
 export function EquityChart({ points, currency }: { points: EquityPoint[]; currency: string }) {
+  const { hidden } = usePrivacy();
   if (points.length < 2) {
     return (
       <Panel title="Curva de capital" className="border-dashed bg-transparent">
@@ -59,7 +62,7 @@ export function EquityChart({ points, currency }: { points: EquityPoint[]; curre
       description="Arriba el balance; abajo, cuánto estás por debajo de tu máximo."
       actions={
         <p className="num text-sm text-subtle">
-          Máx. drawdown <span className={minDd < 0 ? "text-loss" : undefined}>{money(minDd, currency)}</span>
+          Máx. drawdown <Private className={minDd < 0 ? "text-loss" : undefined}>{money(minDd, currency)}</Private>
         </p>
       }
       bodyClassName="px-1 sm:px-2"
@@ -81,7 +84,7 @@ export function EquityChart({ points, currency }: { points: EquityPoint[]; curre
               tickLine={false}
               axisLine={false}
               width={56}
-              tickFormatter={(v: number) => money(v, currency, 0)}
+              tickFormatter={(v: number) => (hidden ? "****" : money(v, currency, 0))}
             />
             <Tooltip
               cursor={{ stroke: "var(--border)" }}
@@ -120,7 +123,7 @@ export function EquityChart({ points, currency }: { points: EquityPoint[]; curre
               tickLine={false}
               axisLine={false}
               width={56}
-              tickFormatter={(v: number) => money(v, currency, Math.abs(v) < 10 && v !== 0 ? 2 : 0)}
+              tickFormatter={(v: number) => (hidden ? "****" : money(v, currency, Math.abs(v) < 10 && v !== 0 ? 2 : 0))}
             />
             <Tooltip
               cursor={{ stroke: "var(--border)" }}

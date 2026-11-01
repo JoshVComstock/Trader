@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { AppHeader } from "@/components/app/app-header";
 import { PageHeader, PageMain } from "@/components/app/layout";
 import { Button } from "@/components/ui/button";
 import { CalendarCheckIcon } from "lucide-react";
@@ -11,23 +10,44 @@ import {
   bySpike,
   calendarWeeks,
   computeKpis,
-  currentBalance,
   equityCurve,
 } from "@/lib/calc/metrics";
-import type { JournalData } from "@/lib/data";
+import type { Account, JournalData } from "@/lib/data";
 import { disciplineStreak } from "@/lib/psych";
 import { monthRange } from "@/lib/time-core";
 import { ByHourCard, ByInstrumentCard, SpikeCard } from "./breakdowns";
 import { MonthCalendar } from "./calendar";
 import { DisciplineStrip } from "./discipline-strip";
 import { EquityChart } from "./equity-chart";
-import { JournalProvider } from "./journal-context";
+import { JournalProvider, type JournalClientData } from "./journal-context";
 import { KpiRow } from "./kpis";
 import { MoodComparison } from "./mood-comparison";
 import { ObservationsPanel } from "./observations-panel";
 import { Reminders } from "./reminders";
 import { RegisterFab, TopBar } from "./top-bar";
 import { TradesTable } from "./trades-table";
+
+/** Lo que necesita el contexto del cliente (formulario, check-in, ventana flotante). */
+export function journalClientData(data: JournalData, account: Account): JournalClientData {
+  return {
+    mode: data.mode,
+    account,
+    strategies: data.strategies,
+    rules: data.rules,
+    session: data.session,
+    sessionTrades: data.sessionTrades,
+    trades: data.trades,
+    lastTrade: data.lastTrade,
+    balance: account.balance,
+    today: data.today,
+    settings: data.settings,
+    calmMessages: data.calmMessages,
+    lastReview: data.lastReview,
+    observations: data.observations,
+    goals: data.goals,
+    lastGoal: Object.entries(data.goals).sort(([a], [b]) => b.localeCompare(a))[0]?.[1] ?? null,
+  };
+}
 
 /** La página del journal: una sola, siete bloques, de arriba abajo. */
 export function JournalView({ data }: { data: JournalData }) {
@@ -36,7 +56,6 @@ export function JournalView({ data }: { data: JournalData }) {
   if (!account) {
     return (
       <>
-        <AppHeader />
         <PageMain className="max-w-2xl py-16">
           <PageHeader
             title={mode === "backtest" ? "Crea una cuenta de backtesting" : "Crea tu primera cuenta de trading"}
@@ -66,10 +85,10 @@ export function JournalView({ data }: { data: JournalData }) {
     }),
     { wins: 0, losses: 0, gp: 0, gl: 0 },
   );
-  const curve = equityCurve(account.start_balance, data.daily, data.month);
+  // La curva arranca en lo inicial más los depósitos y menos los retiros: así termina en el balance de hoy.
+  const curve = equityCurve(account.balance - account.pnl_total, data.daily, data.month);
   const weeks = calendarWeeks(data.month, monthRows);
   const spike = bySpike(data.trades);
-  const balance = currentBalance(account.start_balance, data.daily);
   const psych = data.settings.psych;
   const streak = psych.discipline_streak && mode === "live" ? disciplineStreak(data.daily) : null;
   const moods = psych.mood_comparison ? byMood(data.trades) : null;
@@ -77,24 +96,7 @@ export function JournalView({ data }: { data: JournalData }) {
   return (
     <JournalProvider
       key={account.id}
-      data={{
-        mode,
-        account,
-        strategies: data.strategies,
-        rules: data.rules,
-        session: data.session,
-        sessionTrades: data.sessionTrades,
-        trades: data.trades,
-        lastTrade: data.lastTrade,
-        balance,
-        today: data.today,
-        settings: data.settings,
-        calmMessages: data.calmMessages,
-        lastReview: data.lastReview,
-        observations: data.observations,
-        goals: data.goals,
-        lastGoal: Object.entries(data.goals).sort(([a], [b]) => b.localeCompare(a))[0]?.[1] ?? null,
-      }}
+      data={journalClientData(data, account)}
     >
       {/* 1 · Barra superior */}
       <TopBar mode={mode} accounts={data.accounts} accountId={account.id} month={data.month} today={data.today} />

@@ -17,6 +17,7 @@ import { dateTimeShort, inLaPaz, percent, rValue, signedMoney } from "@/lib/form
 import { RULE_META, type RuleType } from "@/lib/rules";
 import { addDays } from "@/lib/time-core";
 import { cn } from "@/lib/utils";
+import { Private } from "@/components/app/private";
 
 type Spike = "all" | "with" | "against";
 
@@ -190,7 +191,7 @@ export function ReviewView({ data }: { data: ReviewData }) {
       {/* Números de la semana (con filtros) */}
       <section aria-label="Resumen de la semana" className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border lg:grid-cols-6">
         <Stat label="Operaciones" value={String(summary.n)} sub={active ? "con los filtros" : "en la semana"} />
-        <Stat label="Neto" value={summary.n ? signedMoney(summary.net) : "—"} tone={summary.net} />
+        <Stat label="Neto" value={summary.n ? signedMoney(summary.net) : "—"} tone={summary.net} secret />
         <Stat label="R acumulada" value={summary.n ? rValue(summary.r) : "—"} tone={summary.r} sub={`Win rate ${percent(summary.winRate)}`} />
         <Stat label="Dentro del plan" value={percent(summary.inPlan)} sub={`${summary.broken} rompieron reglas`} />
         <Stat
@@ -296,11 +297,27 @@ function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; chi
   );
 }
 
-function Stat({ label, value, sub, tone, className }: { label: string; value: string; sub?: string; tone?: number; className?: string }) {
+function Stat({
+  label,
+  value,
+  sub,
+  tone,
+  className,
+  secret,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  tone?: number;
+  className?: string;
+  secret?: boolean;
+}) {
   return (
     <div className={cn("bg-card px-5 py-4", className)}>
       <p className="text-sm text-muted-foreground">{label}</p>
-      <p className={cn("num mt-1 text-2xl font-semibold", tone === undefined || tone === 0 ? "" : tone > 0 ? "text-gain" : "text-loss")}>{value}</p>
+      <p className={cn("num mt-1 text-2xl font-semibold", tone === undefined || tone === 0 ? "" : tone > 0 ? "text-gain" : "text-loss")}>
+        {secret ? <Private>{value}</Private> : value}
+      </p>
       {sub && <p className="mt-0.5 text-xs text-subtle">{sub}</p>}
     </div>
   );

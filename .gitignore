@@ -41,6 +41,16 @@ yarn-error.log*
 next-env.d.ts
 !.env.example
 
-# supabase local
-supabase/.temp
-supabase/.branches
+# firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+*-debug.log
+
+# credenciales locales de Firebase (nunca al repo)
+credenciales.firebase
+firebase-service-account.json
+*-firebase-adminsdk-*.json
+
+/.next-*/

@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "Racha",
     description: "Registra tus operaciones de Boom y Crash y mide tu disciplina.",
     id: "/journal",
-    start_url: "/journal",
+    start_url: "/operar",
     scope: "/",
     display: "standalone",
     orientation: "portrait",
@@ -17,6 +17,11 @@ export default function manifest(): MetadataRoute.Manifest {
       { src: "/pwa-icon/192", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/pwa-icon/512", sizes: "512x512", type: "image/png", purpose: "any" },
       { src: "/pwa-icon/maskable", sizes: "512x512", type: "image/png", purpose: "maskable" },
+    ],
+    shortcuts: [
+      { name: "Operar hoy", url: "/operar" },
+      { name: "Bitácora", url: "/journal" },
+      { name: "Backtesting", url: "/backtesting" },
     ],
   };
 }

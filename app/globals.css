@@ -120,6 +120,11 @@
       font-size: 17px;
     }
   }
+  @media (min-width: 1680px) {
+    html {
+      font-size: 18px;
+    }
+  }
   body {
     @apply bg-background text-foreground;
     font-variant-numeric: tabular-nums;
@@ -128,6 +133,26 @@
   [role="button"]:not(:disabled) {
     cursor: pointer;
   }
+}
+
+/* Modo privado (el ojito): los montos se tapan con **** sin mover nada de lugar. */
+.privacy .money {
+  position: relative;
+  display: inline-block;
+  color: transparent !important;
+  user-select: none;
+}
+.privacy .money * {
+  color: transparent !important;
+}
+.privacy .money::after {
+  content: "****";
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--muted-foreground);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
 }
 
 @utility num {

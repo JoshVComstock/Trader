@@ -80,7 +80,7 @@ export function AttachmentsPanel({ tradeId, initial, enabled }: { tradeId: strin
 
   function remove(shot: Shot) {
     startRemove(async () => {
-      const res = await removeAttachment(shot.id);
+      const res = await removeAttachment(tradeId, shot.id);
       if (!res.ok) {
         toast.error(res.error);
         return;

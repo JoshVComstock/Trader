@@ -96,7 +96,8 @@ export const checkinSchema = z.object({
 export type CheckinInput = z.infer<typeof checkinSchema>;
 
 export const closeSessionSchema = z.object({
-  session_id: z.uuid(),
+  // Id de la sesión: "<cuenta>_<YYYY-MM-DD>".
+  session_id: z.string().regex(/^[0-9a-f-]{36}_\d{4}-\d{2}-\d{2}$/i, "Sesión inválida"),
   followed_plan: z.boolean(),
   journal: z.string().trim().max(4000).nullable(),
 });
@@ -114,6 +115,16 @@ export const accountSchema = z.object({
   start_balance: money.min(0, "No puede ser negativo"),
 });
 export type AccountInput = z.infer<typeof accountSchema>;
+
+/** Retiro o depósito: mueve el balance de la cuenta sin ser una operación. */
+export const cashflowSchema = z.object({
+  account_id: z.uuid(),
+  kind: z.enum(["withdrawal", "deposit"]),
+  amount: positiveMoney,
+  date: z.iso.date({ error: "Fecha inválida" }),
+  note: z.string().trim().max(200).nullable(),
+});
+export type CashflowInput = z.infer<typeof cashflowSchema>;
 
 export const strategySchema = z.object({
   id: z.uuid().optional(),

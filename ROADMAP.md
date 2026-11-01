@@ -1,5 +1,36 @@
 # ROADMAP
 
+## Migración a Firebase (1 nov)
+
+- **Supabase → Firebase.** Auth con email y contraseña de Firebase; datos en Firestore. Las notas de abajo que
+  hablan de tablas, RLS y triggers de Postgres describen la versión anterior: esas garantías ahora viven en
+  transacciones del Admin SDK (`lib/db/ledger.ts`) y en las reglas de Firestore, que cierran todo acceso directo.
+- **Sin SDK de Firebase en el navegador.** El login llama a la API de Identity Toolkit desde un Server Action y
+  guarda una *session cookie* de Firebase (httpOnly, 14 días). `verifySessionCookie` es local. El proxy solo
+  mira si la cookie existe; la firma se verifica en cada página (`requireUser`).
+- **Caché de datos de Next con etiquetas** (`unstable_cache` + `updateTag`, sin `cacheComponents`). Etiquetas por
+  usuario: perfil, cuentas, estrategias, libro de cada cuenta, lecturas que cruzan cuentas, observaciones y
+  revisiones. Un día de vida como red de seguridad. Escribir por fuera de la app (seed, migración, consola) no
+  invalida: para eso está *Ajustes → Datos → Volver a leer mis datos*.
+- **Resumen del día dentro de la sesión** (`sessions.metrics`, reemplaza `metrics_daily`) y **totales en la
+  cuenta** (`pnl_total`, `deposits_total`, `withdrawals_total`). Se actualizan en la misma transacción que la
+  operación. Id de sesión determinista `{cuenta}_{fecha}`: se lee directo, sin consulta.
+- Violaciones y capturas van dentro del documento de la operación (antes eran tablas aparte).
+- Operaciones del mes: `session_id in [...]` con los ids de los días del mes (de a 30). Ninguna consulta
+  necesita índice compuesto.
+- **Balance real con retiros y depósitos.** Antes la cuenta mostraba solo el balance inicial en Ajustes y el
+  riesgo se calculaba sumando días; ahora `balance = inicial + P/L + depósitos − retiros`, visible en Operar y
+  Ajustes. Un retiro no puede superar el balance. La curva de capital arranca en inicial + movimientos para
+  terminar en el balance de hoy.
+- **Vista Operar** (`/operar`, la de inicio): hoy (check-in, reloj, meta, registrar), calendario, operaciones y
+  balance. La bitácora queda para las estadísticas.
+- **Calendario de lunes a viernes en cuentas en vivo**; backtesting muestra los siete días. Si igual operaste un
+  fin de semana, la semana lo suma y muestra "+ fin de semana".
+- **PWA más rápida.** Service worker con caché de archivos (primero caché) y copia de páginas (red primero con
+  4 s de espera); borra las copias al salir. `staleTimes.dynamic = 30` y esqueletos de carga en cada ruta.
+- Transporte REST de Firestore (`preferRest`) en producción: arranca más rápido en serverless. El emulador usa
+  gRPC.
+
 ## Decisiones tomadas en la v0
 
 **Cambios respecto al prompt original, pedidos por el usuario**
@@ -100,7 +131,6 @@
 - Notificación al acercarse al tiempo máximo de sesión sin necesidad de registrar.
 - Estadísticas comparadas real vs backtesting de la misma estrategia.
 - Filtros de la tabla por índice, estado mental o regla rota.
-- Modo sin conexión real (cola offline de operaciones con service worker).
-- Transacción única para "operación + violaciones + bloqueo" (hoy son tres escrituras; el trigger de la base
-  garantiza el bloqueo igual).
+- Modo sin conexión real (cola offline de operaciones con service worker). Hoy las páginas se ven sin red,
+  pero registrar necesita conexión (las fallidas quedan para reintentar).
 - Sincronización con brokers, importación de archivos, IA, comunidad, pagos: fuera de alcance por diseño.

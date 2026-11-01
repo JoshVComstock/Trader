@@ -109,7 +109,7 @@ export function SessionTimerPanel({ clock: c }: { clock: SessionClock }) {
       </p>
       {c.plannedMin && (
         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
-          <div className={cn("h-full rounded-full", bar)} style={{ width: `${pct}%` }} />
+          <div className={cn("h-full rounded-full", bar)} style={{ width: `${pct}%` }} suppressHydrationWarning />
         </div>
       )}
       {!c.running && <p className="mt-1.5 text-xs text-subtle">La sesión ya no está abierta: el reloj se detuvo.</p>}

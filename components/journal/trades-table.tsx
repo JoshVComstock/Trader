@@ -14,6 +14,7 @@ import { localDate } from "@/lib/time-core";
 import { useJournal } from "./journal-context";
 import { RHelp } from "./r-help";
 import type { PendingTrade } from "./pending-store";
+import { Private } from "@/components/app/private";
 
 const PAGE = 10;
 
@@ -130,7 +131,7 @@ export function TradesTable({ currency }: { currency: string }) {
                     <td className={cn("px-2 py-3 whitespace-nowrap", r.with_spike ? "text-muted-foreground" : "text-warn")}>
                       {r.with_spike ? "A favor" : "Contra"}
                     </td>
-                    <td className="num px-2 py-3 text-right text-muted-foreground">{money(r.stake, currency)}</td>
+                    <td className="num px-2 py-3 text-right text-muted-foreground"><Private>{money(r.stake, currency)}</Private></td>
                     <td className={cn("num px-2 py-3 text-right font-medium", outcomeTone[r.outcome])}>{rValue(r.r_multiple)}</td>
                     <td className="px-2 py-3">
                       {r.pending ? <PendingCell p={r.pending} onRetry={retryPending} onEdit={editPending} onDiscard={discardPending} /> : (

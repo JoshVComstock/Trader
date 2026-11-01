@@ -11,6 +11,7 @@ import { instrumentLabel } from "@/lib/domain/instruments";
 import { DIRECTION_LABEL, MOOD_LABEL, type Mood } from "@/lib/domain/types";
 import { dayLabel, money, rValue, signedMoney, timeShort } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { Private } from "@/components/app/private";
 
 /** Historia completa de un día: check-in, cada operación con su foto y nota, y el cierre. */
 export function DayStorySheet({
@@ -58,7 +59,7 @@ export function DayStorySheet({
               ? `${story.trades.length} ${story.trades.length === 1 ? "operación" : "operaciones"} · `
               : "Historia del día"}
             {loaded && story.trades.length > 0 && (
-              <span className={cn("num font-medium", net > 0 ? "text-gain" : net < 0 ? "text-loss" : "")}>{signedMoney(net, currency)}</span>
+              <span className={cn("num font-medium", net > 0 ? "text-gain" : net < 0 ? "text-loss" : "")}><Private>{signedMoney(net, currency)}</Private></span>
             )}
           </SheetDescription>
         </SheetHeader>
@@ -97,14 +98,19 @@ export function DayStorySheet({
                   }
                   aside={
                     <span className={cn("num text-right font-semibold", t.pnl > 0 ? "text-gain" : t.pnl < 0 ? "text-loss" : "")}>
-                      {signedMoney(t.pnl, currency)}
+                      <Private>{signedMoney(t.pnl, currency)}</Private>
                       <span className="block text-xs font-normal text-subtle">{rValue(t.r_multiple)}</span>
                     </span>
                   }
                 >
                   <p className="num text-xs text-muted-foreground">
-                    {t.entry_amount !== null && `Inversión ${money(t.entry_amount, currency)}${t.multiplier ? ` ×${t.multiplier}` : ""} · `}
-                    Stop {money(t.stake, currency)} · {t.with_spike ? "a favor del spike" : "contra el spike"}
+                    {t.entry_amount !== null && (
+                      <>
+                        Inversión <Private>{money(t.entry_amount, currency)}</Private>
+                        {t.multiplier ? ` ×${t.multiplier}` : ""} ·{" "}
+                      </>
+                    )}
+                    Stop <Private>{money(t.stake, currency)}</Private> · {t.with_spike ? "a favor del spike" : "contra el spike"}
                     {t.mood && ` · ${MOOD_LABEL[t.mood as Mood].toLowerCase()}`}
                     {t.closed_at && ` · cerró ${timeShort(t.closed_at)}`}
                   </p>

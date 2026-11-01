@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { currentUser } from "@/lib/auth";
 import { LoginForm } from "./login-form";
 
 export const metadata: Metadata = { title: "Entrar" };
@@ -9,6 +11,8 @@ export default async function LoginPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { next, error } = await searchParams;
+  // Con una sesión válida no hay nada que hacer aquí. Una cookie caducada sí llega: se muestra el formulario.
+  if (await currentUser()) redirect(typeof next === "string" && next.startsWith("/") && !next.startsWith("//") ? next : "/operar");
   return (
     <main className="mx-auto flex min-h-svh w-full max-w-sm flex-col justify-center gap-8 px-5 py-10">
       <div className="space-y-2">

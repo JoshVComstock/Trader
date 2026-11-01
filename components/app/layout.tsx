@@ -6,9 +6,9 @@ import { cn } from "@/lib/utils";
  * así cambiar el espaciado o el ancho se hace en un solo lugar.
  */
 
-/** Ancho de página: aprovecha pantallas grandes sin dejar márgenes enormes a los lados. */
+/** Ancho de página: usa casi toda la pantalla grande, sin márgenes enormes a los lados. */
 export function Container({ className, ...props }: ComponentProps<"div">) {
-  return <div className={cn("mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8", className)} {...props} />;
+  return <div className={cn("mx-auto w-full max-w-[1800px] px-4 sm:px-6 lg:px-8 2xl:px-10", className)} {...props} />;
 }
 
 /** Contenido principal de una página. */

@@ -1,7 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { currentUser } from "@/lib/auth";
+import { db } from "@/lib/db/admin";
+import { listAccounts, listStrategies } from "@/lib/db/queries";
+import { refs, type TradeDoc } from "@/lib/db/schema";
 import { instrumentLabel } from "@/lib/domain/instruments";
 import { inLaPaz } from "@/lib/format";
-import { createClient } from "@/lib/supabase/server";
 
 const HEADER = [
   "id",
@@ -35,31 +38,31 @@ function cell(value: unknown): string {
 
 /** Exporta las operaciones a CSV. Necesita una ruta: un Server Action no puede devolver una descarga. */
 export async function GET(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await currentUser();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const accountId = request.nextUrl.searchParams.get("cuenta");
-  let query = supabase
-    .from("trades")
-    .select(
-      "id, opened_at, closed_at, instrument, direction, with_spike, stake, tp, pnl, r_multiple, outcome, mood, in_plan, moved_sl, checklist, note, accounts!inner(label, kind), sessions!inner(date), strategies(name), rule_violations(count)",
-    )
-    .order("opened_at");
-  if (accountId) query = query.eq("account_id", accountId);
+  const col = refs(db(), user.uid).trades;
+  const [snap, accounts, strategies] = await Promise.all([
+    (accountId ? col.where("account_id", "==", accountId) : col).get(),
+    listAccounts(user.uid),
+    listStrategies(user.uid),
+  ]).catch(() => [null, [], []] as const);
+  if (!snap) return NextResponse.json({ error: "No pudimos exportar" }, { status: 500 });
 
-  const { data, error } = await query;
-  if (error) return NextResponse.json({ error: "No pudimos exportar" }, { status: 500 });
+  const accountById = new Map(accounts.map((a) => [a.id, a]));
+  const strategyName = new Map(strategies.map((s) => [s.id, s.name]));
+  const trades = snap.docs
+    .map((d) => ({ id: d.id, ...(d.data() as TradeDoc) }))
+    .sort((a, b) => a.opened_at.localeCompare(b.opened_at));
 
-  const rows = data.map((t) => {
-    const checklist = (t.checklist ?? {}) as Record<string, unknown>;
+  const rows = trades.map((t) => {
+    const account = accountById.get(t.account_id);
     return [
       t.id,
-      t.accounts.label,
-      t.accounts.kind,
-      t.sessions.date,
+      account?.label,
+      account?.kind,
+      t.session_date,
       inLaPaz(t.opened_at, "yyyy-MM-dd HH:mm:ss"),
       t.closed_at ? inLaPaz(t.closed_at, "yyyy-MM-dd HH:mm:ss") : "",
       instrumentLabel(t.instrument),
@@ -71,11 +74,11 @@ export async function GET(request: NextRequest) {
       t.r_multiple,
       t.outcome === "win" ? "ganada" : t.outcome === "loss" ? "perdida" : "empate",
       t.mood,
-      t.strategies?.name,
+      t.strategy_id ? strategyName.get(t.strategy_id) : "",
       t.in_plan ? "si" : "no",
       t.moved_sl ? "si" : "no",
-      checklist.impulse === true ? "si" : "no",
-      t.rule_violations[0]?.count ?? 0,
+      t.checklist?.impulse === true ? "si" : "no",
+      t.violations?.length ?? 0,
       t.note,
     ]
       .map(cell)

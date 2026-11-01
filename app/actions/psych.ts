@@ -1,15 +1,15 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { randomUUID } from "node:crypto";
 import { fail, ok, zodFieldErrors, type ActionResult } from "@/lib/action-result";
+import { requireUser } from "@/lib/auth";
 import { signedImageUrl } from "@/lib/cloudinary";
-import { requireUser } from "@/lib/data";
+import { db } from "@/lib/db/admin";
+import { invalidate } from "@/lib/db/invalidate";
+import { getDay } from "@/lib/db/queries";
+import { refs, type ObservationDoc, type WeeklyReviewDoc } from "@/lib/db/schema";
 import { PSYCH_FEATURES } from "@/lib/domain/psych";
 import { observationSchema, userSettingsSchema, weeklyReviewSchema } from "@/lib/schemas";
-
-function revalidateAll() {
-  revalidatePath("/", "layout");
-}
 
 /** Prende o apaga funciones de control mental y guarda la frase de pausa. */
 export async function saveUserSettings(raw: unknown): Promise<ActionResult> {
@@ -18,36 +18,40 @@ export async function saveUserSettings(raw: unknown): Promise<ActionResult> {
   const known = new Set<string>(PSYCH_FEATURES.map((f) => f.key));
   const psych = Object.fromEntries(Object.entries(parsed.data.psych).filter(([k]) => known.has(k)));
 
-  const { supabase, user } = await requireUser();
-  const { error } = await supabase.from("user_settings").upsert(
-    {
-      user_id: user.id,
-      psych,
-      pause_phrase: parsed.data.pause_phrase || null,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "user_id" },
-  );
-  if (error) return fail("No pudimos guardar los ajustes", "unknown");
-  revalidateAll();
+  const { uid } = await requireUser();
+  try {
+    await refs(db(), uid).user.set(
+      { psych, pause_phrase: parsed.data.pause_phrase || null, updated_at: new Date().toISOString() },
+      { merge: true },
+    );
+  } catch (e) {
+    console.error("[saveUserSettings]", e);
+    return fail("No pudimos guardar los ajustes", "unknown");
+  }
+  invalidate.profile(uid);
   return ok(undefined);
 }
 
 export async function saveWeeklyReview(raw: unknown): Promise<ActionResult> {
   const parsed = weeklyReviewSchema.safeParse(raw);
   if (!parsed.success) return fail("Revisa tu respuesta", "validation", zodFieldErrors(parsed.error.issues));
-  const { supabase, user } = await requireUser();
-  const { error } = await supabase.from("weekly_reviews").upsert(
-    {
-      user_id: user.id,
+  const { uid } = await requireUser();
+  const ref = refs(db(), uid).reviews.doc(parsed.data.week_start);
+  const now = new Date().toISOString();
+  try {
+    const existing = await ref.get();
+    const doc: WeeklyReviewDoc = {
       week_start: parsed.data.week_start,
       answer: parsed.data.answer,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "user_id,week_start" },
-  );
-  if (error) return fail("No pudimos guardar la revisión", "unknown");
-  revalidateAll();
+      created_at: (existing.get("created_at") as string | undefined) ?? now,
+      updated_at: now,
+    };
+    await ref.set(doc);
+  } catch (e) {
+    console.error("[saveWeeklyReview]", e);
+    return fail("No pudimos guardar la revisión", "unknown");
+  }
+  invalidate.reviews(uid);
   return ok(undefined);
 }
 
@@ -55,44 +59,54 @@ export async function saveObservation(raw: unknown): Promise<ActionResult<{ id: 
   const parsed = observationSchema.safeParse(raw);
   if (!parsed.success) return fail("Revisa la observación", "validation", zodFieldErrors(parsed.error.issues));
   const { id, ...values } = parsed.data;
-  const { supabase, user } = await requireUser();
+  const { uid } = await requireUser();
+  const col = refs(db(), uid).observations;
 
-  if (id) {
-    const { error } = await supabase.from("observations").update(values).eq("id", id);
-    if (error) return fail("No pudimos guardar la observación", "unknown");
-    revalidateAll();
-    return ok({ id });
+  try {
+    if (id) {
+      await col.doc(id).update(values);
+      invalidate.observations(uid);
+      return ok({ id });
+    }
+    const now = new Date().toISOString();
+    const newId = randomUUID();
+    const doc: ObservationDoc = { ...values, times_seen: 1, last_seen_at: now, created_at: now };
+    await col.doc(newId).set(doc);
+    invalidate.observations(uid);
+    return ok({ id: newId });
+  } catch (e) {
+    console.error("[saveObservation]", e);
+    return fail("No pudimos guardar la observación", "unknown");
   }
-  const { data, error } = await supabase
-    .from("observations")
-    .insert({ ...values, user_id: user.id })
-    .select("id")
-    .single();
-  if (error) return fail("No pudimos guardar la observación", "unknown");
-  revalidateAll();
-  return ok({ id: data.id });
 }
 
 /** "Se repitió": suma una vez más y actualiza cuándo la viste. */
 export async function bumpObservation(id: string): Promise<ActionResult<{ times: number }>> {
-  const { supabase } = await requireUser();
-  const { data: current } = await supabase.from("observations").select("times_seen").eq("id", id).maybeSingle();
-  if (!current) return fail("No encontramos esa observación", "not_found");
-  const times = current.times_seen + 1;
-  const { error } = await supabase
-    .from("observations")
-    .update({ times_seen: times, last_seen_at: new Date().toISOString() })
-    .eq("id", id);
-  if (error) return fail("No pudimos actualizarla", "unknown");
-  revalidateAll();
+  const { uid } = await requireUser();
+  const ref = refs(db(), uid).observations.doc(id);
+  const times = await db()
+    .runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) return null;
+      const next = ((snap.get("times_seen") as number | undefined) ?? 1) + 1;
+      tx.update(ref, { times_seen: next, last_seen_at: new Date().toISOString() });
+      return next;
+    })
+    .catch(() => undefined);
+  if (times === undefined) return fail("No pudimos actualizarla", "unknown");
+  if (times === null) return fail("No encontramos esa observación", "not_found");
+  invalidate.observations(uid);
   return ok({ times });
 }
 
 export async function deleteObservation(id: string): Promise<ActionResult> {
-  const { supabase } = await requireUser();
-  const { error } = await supabase.from("observations").delete().eq("id", id);
-  if (error) return fail("No pudimos borrarla", "unknown");
-  revalidateAll();
+  const { uid } = await requireUser();
+  try {
+    await refs(db(), uid).observations.doc(id).delete();
+  } catch {
+    return fail("No pudimos borrarla", "unknown");
+  }
+  invalidate.observations(uid);
   return ok(undefined);
 }
 
@@ -134,23 +148,11 @@ export interface DayStory {
 /** Todo lo que pasó un día en una cuenta: el check-in, cada operación con su foto y nota, y el cierre. */
 export async function getDayStory(accountId: string, date: string): Promise<ActionResult<DayStory>> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail("Fecha inválida", "validation");
-  const { supabase } = await requireUser();
-  const { data: session } = await supabase
-    .from("sessions")
-    .select("id, opened_at, closed_at, mood_before, planned_minutes, goal_r, read_rules, followed_plan, journal, status, blocked_reason")
-    .eq("account_id", accountId)
-    .eq("date", date)
-    .maybeSingle();
+  const { uid } = await requireUser();
+  const day = await getDay(uid, accountId, date).catch(() => null);
+  if (!day) return fail("No pudimos leer ese día", "unknown");
+  const { session, trades } = day;
   if (!session) return ok({ date, session: null, trades: [] });
-
-  const { data: trades, error } = await supabase
-    .from("trades")
-    .select(
-      "id, opened_at, closed_at, instrument, direction, with_spike, stake, entry_amount, multiplier, pnl, r_multiple, outcome, mood, note, in_plan, rule_violations(message), attachments(id, path, width, height)",
-    )
-    .eq("session_id", session.id)
-    .order("opened_at");
-  if (error) return fail("No pudimos leer ese día", "unknown");
 
   return ok({
     date,
@@ -159,7 +161,7 @@ export async function getDayStory(accountId: string, date: string): Promise<Acti
       closed_at: session.closed_at,
       mood_before: session.mood_before,
       planned_minutes: session.planned_minutes,
-      goal_r: session.goal_r === null ? null : Number(session.goal_r),
+      goal_r: session.goal_r,
       read_rules: session.read_rules,
       followed_plan: session.followed_plan,
       journal: session.journal,
@@ -173,17 +175,18 @@ export async function getDayStory(accountId: string, date: string): Promise<Acti
       instrument: t.instrument,
       direction: t.direction,
       with_spike: t.with_spike,
-      stake: Number(t.stake),
-      entry_amount: t.entry_amount === null ? null : Number(t.entry_amount),
+      stake: t.stake,
+      entry_amount: t.entry_amount,
       multiplier: t.multiplier,
-      pnl: Number(t.pnl),
-      r_multiple: Number(t.r_multiple),
+      pnl: t.pnl,
+      r_multiple: t.r_multiple,
       outcome: t.outcome,
       mood: t.mood,
       note: t.note,
       in_plan: t.in_plan,
-      violations: t.rule_violations.map((v) => v.message),
-      shots: t.attachments.map((a) => ({ id: a.id, width: a.width, height: a.height, url: signedImageUrl(a.path) })),
+      violations: t.violation_messages,
+      // Los enlaces firmados caducan: se firman al pedir el día, no se guardan en la caché.
+      shots: t.shots.map((a) => ({ id: a.id, width: a.width, height: a.height, url: signedImageUrl(a.path) })),
     })),
   });
 }

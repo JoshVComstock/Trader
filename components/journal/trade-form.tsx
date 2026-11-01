@@ -27,6 +27,7 @@ import { tradeInputSchema, type TradeInput } from "@/lib/schemas";
 import { localDate } from "@/lib/time-core";
 import { AccountFlow, RHelp } from "./r-help";
 import { SessionTimerChip, useSessionClock } from "./session-timer";
+import { Private } from "@/components/app/private";
 
 export interface TradeFormValues {
   id: string;
@@ -403,7 +404,7 @@ export function TradeForm({
                 className="h-11"
                 aria-invalid={Boolean(errors.entry_amount)}
               />
-              {balance > 0 && <span className="num block text-xs text-subtle">De tu cuenta de {money(balance, currency)}</span>}
+              {balance > 0 && <span className="num block text-xs text-subtle">De tu cuenta de <Private>{money(balance, currency)}</Private></span>}
               <FieldError message={errors.entry_amount?.message} />
             </label>
             <label className="block space-y-1.5">

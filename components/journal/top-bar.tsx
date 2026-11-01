@@ -2,7 +2,7 @@
 
 import { CameraIcon, ChevronLeftIcon, ChevronRightIcon, HourglassIcon, PictureInPicture2Icon, PlusIcon } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { AppHeader } from "@/components/app/app-header";
+import { Container } from "@/components/app/layout";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ACCOUNT_KIND_LABEL, type JournalMode } from "@/lib/domain/types";
@@ -13,7 +13,7 @@ import { useJournal } from "./journal-context";
 import { usePause } from "./pause";
 import { clock, SessionTimerChip, useSessionClock } from "./session-timer";
 
-/** Bloque 1 del journal: cabecera de la app + barra de cuenta, mes, temporizador y registrar. */
+/** Bloque 1 del journal: barra de cuenta, mes, temporizador y registrar, pegada debajo de la cabecera. */
 export function TopBar({
   mode,
   accounts,
@@ -28,10 +28,11 @@ export function TopBar({
   today: string;
 }) {
   return (
-    <AppHeader
-      accountId={accountId}
-      toolbar={<JournalToolbar mode={mode} accounts={accounts} accountId={accountId} month={month} today={today} />}
-    />
+    <div className="sticky top-[calc(3.5rem+env(safe-area-inset-top))] z-30 border-b bg-background/90 backdrop-blur-md">
+      <Container className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5">
+        <JournalToolbar mode={mode} accounts={accounts} accountId={accountId} month={month} today={today} />
+      </Container>
+    </div>
   );
 }
 

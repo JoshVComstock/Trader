@@ -9,6 +9,7 @@ import { compactMoney, signedMoney } from "@/lib/format";
 import { useState } from "react";
 import { DayStorySheet } from "./day-story";
 import { useJournal } from "./journal-context";
+import { Private } from "@/components/app/private";
 
 const WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
@@ -19,8 +20,20 @@ function cellBackground(pnl: number, maxAbs: number): string | undefined {
   return `color-mix(in oklch, var(${pnl > 0 ? "--gain" : "--loss"}) ${strength}%, transparent)`;
 }
 
-export function MonthCalendar({ weeks, today, currency }: { weeks: CalendarWeek[]; today: string; currency: string }) {
+export function MonthCalendar({
+  weeks,
+  today,
+  currency,
+  className,
+}: {
+  weeks: CalendarWeek[];
+  today: string;
+  currency: string;
+  className?: string;
+}) {
   const { selectedDay, setSelectedDay, data } = useJournal();
+  // En vivo se opera de lunes a viernes; el fin de semana queda para el backtesting.
+  const days = data.mode === "live" ? 5 : 7;
   const [storyDay, setStoryDay] = useState<string | null>(null);
   // Tocar un día abre su historia y además filtra la tabla de abajo.
   const openDay = (date: string | null) => {
@@ -29,12 +42,18 @@ export function MonthCalendar({ weeks, today, currency }: { weeks: CalendarWeek[
   };
   const maxAbs = Math.max(0, ...weeks.flatMap((w) => w.cells.map((c) => Math.abs(c.day?.pnl ?? 0))));
   // Las semanas sin ningún día del mes (la sexta, a veces) no se muestran.
-  const visible = weeks.filter((w) => w.cells.some((c) => c.inMonth));
+  // (Una semana con solo el fin de semana dentro del mes se muestra si se operó ese fin de semana.)
+  const visible = weeks.filter((w) => w.cells.slice(0, days).some((c) => c.inMonth) || w.cells.some((c) => c.inMonth && c.day));
 
   return (
     <Panel
+      className={className}
       title="Calendario"
-      description="Toca un día para ver su historia. El punto: respetaste tus reglas. El blanco verde: llegaste a tu objetivo."
+      description={
+        days === 5
+          ? "De lunes a viernes. Toca un día para ver su historia. El punto: respetaste tus reglas. El blanco verde: llegaste a tu objetivo."
+          : "Toca un día para ver su historia. El punto: respetaste tus reglas. El blanco verde: llegaste a tu objetivo."
+      }
       actions={
         selectedDay && (
           <Button variant="ghost" size="sm" onClick={() => setSelectedDay(null)}>
@@ -44,8 +63,13 @@ export function MonthCalendar({ weeks, today, currency }: { weeks: CalendarWeek[
       }
       bodyClassName="overflow-x-auto px-2 sm:px-3"
     >
-      <div className="grid min-w-[44rem] grid-cols-[repeat(7,minmax(0,1fr))_minmax(0,1.15fr)] gap-1.5">
-        {WEEKDAYS.map((d) => (
+      <div
+        className={cn(
+          "grid gap-1.5",
+          days === 5 ? "min-w-[34rem] grid-cols-[repeat(5,minmax(0,1fr))_minmax(0,1.15fr)]" : "min-w-[44rem] grid-cols-[repeat(7,minmax(0,1fr))_minmax(0,1.15fr)]",
+        )}
+      >
+        {WEEKDAYS.slice(0, days).map((d) => (
           <div key={d} className="px-2 pb-1 text-xs text-subtle">
             {d}
           </div>
@@ -53,7 +77,17 @@ export function MonthCalendar({ weeks, today, currency }: { weeks: CalendarWeek[
         <div className="px-2 pb-1 text-xs text-subtle">Semana</div>
 
           {visible.map((week) => (
-            <Week key={week.cells[0].date} week={week} maxAbs={maxAbs} today={today} currency={currency} selected={selectedDay} onSelect={openDay} goals={data.goals} />
+          <Week
+            key={week.cells[0].date}
+            week={week}
+            days={days}
+            maxAbs={maxAbs}
+            today={today}
+            currency={currency}
+            selected={selectedDay}
+            onSelect={openDay}
+            goals={data.goals}
+          />
         ))}
       </div>
       <DayStorySheet accountId={data.account.id} date={storyDay} currency={currency} onClose={() => setStoryDay(null)} />
@@ -63,6 +97,7 @@ export function MonthCalendar({ weeks, today, currency }: { weeks: CalendarWeek[
 
 function Week({
   week,
+  days,
   maxAbs,
   today,
   currency,
@@ -71,6 +106,7 @@ function Week({
   goals,
 }: {
   week: CalendarWeek;
+  days: number;
   maxAbs: number;
   today: string;
   currency: string;
@@ -82,12 +118,14 @@ function Week({
   const withGoal = week.cells.filter((c) => c.day && goals[c.date] !== undefined);
   const met = withGoal.filter((c) => c.day!.pnl >= goals[c.date]).length;
   const wr = s.wins + s.losses > 0 ? Math.round((s.wins / (s.wins + s.losses)) * 100) : null;
+  // Operaciones de fin de semana en una cuenta en vivo: no tienen celda, pero se cuentan en la semana.
+  const weekend = week.cells.slice(days).filter((c) => c.day);
   return (
     <>
-      {week.cells.map((cell) => {
+      {week.cells.slice(0, days).map((cell) => {
         const d = cell.day;
         const dayNum = Number(cell.date.slice(8));
-        if (!cell.inMonth) return <div key={cell.date} className="min-h-[5.5rem] rounded-md" />;
+        if (!cell.inMonth) return <div key={cell.date} className="min-h-[5.5rem] rounded-md" aria-hidden />;
         const isSelected = selected === cell.date;
         const winRate = d && d.wins + d.losses > 0 ? Math.round((d.wins / (d.wins + d.losses)) * 100) : null;
         return (
@@ -109,7 +147,7 @@ function Week({
             {d && (
               <>
                 <span className={cn("num mt-auto text-base font-semibold", d.pnl > 0 ? "text-gain" : d.pnl < 0 ? "text-loss" : "text-foreground")}>
-                  {compactMoney(d.pnl)}
+                  <Private>{compactMoney(d.pnl)}</Private>
                 </span>
                 <span className="num text-[11px] text-muted-foreground">
                   {d.trades} op{winRate !== null && ` · ${winRate}%`}
@@ -136,11 +174,21 @@ function Week({
         {s.trades > 0 ? (
           <>
             <span className={cn("num text-base font-semibold", s.pnl > 0 ? "text-gain" : s.pnl < 0 ? "text-loss" : "text-foreground")}>
-              {compactMoney(s.pnl)}
+              <Private>{compactMoney(s.pnl)}</Private>
             </span>
             <span className="num text-[11px] text-muted-foreground">
               {s.trades} op{wr !== null && ` · ${wr}%`}
             </span>
+            {weekend.length > 0 && (
+              <button
+                type="button"
+                className="num text-left text-[11px] text-warn underline-offset-2 hover:underline"
+                onClick={() => onSelect(weekend[0].date)}
+                title="Operaste el fin de semana. Toca para ver ese día."
+              >
+                + fin de semana
+              </button>
+            )}
             {withGoal.length > 0 && (
               <span className={cn("num flex items-center gap-1 text-[11px]", met === withGoal.length ? "text-gain" : "text-muted-foreground")}>
                 <TargetIcon className="size-3" />

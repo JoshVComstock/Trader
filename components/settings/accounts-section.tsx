@@ -11,10 +11,11 @@ import { Input } from "@/components/ui/input";
 import { zodFieldErrors } from "@/lib/action-result";
 import type { Account } from "@/lib/data";
 import { ACCOUNT_KIND_LABEL, ACCOUNT_KINDS, type AccountKind } from "@/lib/domain/types";
-import { money } from "@/lib/format";
+import { money, signedMoney } from "@/lib/format";
 import { accountSchema } from "@/lib/schemas";
 import { cn } from "@/lib/utils";
 import { SectionHeading } from "./section-heading";
+import { Private } from "@/components/app/private";
 
 interface Draft {
   id?: string;
@@ -27,6 +28,14 @@ function toDraft(a?: Account, kind: AccountKind = "real"): Draft {
   return a
     ? { id: a.id, label: a.label, kind: a.kind, start_balance: String(a.start_balance) }
     : { label: kind === "backtest" ? "Backtesting" : "Deriv", kind, start_balance: kind === "backtest" ? "500" : "250" };
+}
+
+/** "Inicial $21 · operaciones +$5 · retiros −$3": de dónde sale el balance. */
+function balanceBreakdown(a: Account): string {
+  const parts = [`Inicial ${money(a.start_balance, "USD")}`, `operaciones ${signedMoney(a.pnl_total, "USD")}`];
+  if (a.deposits_total > 0) parts.push(`depósitos +${money(a.deposits_total, "USD")}`);
+  if (a.withdrawals_total > 0) parts.push(`retiros −${money(a.withdrawals_total, "USD")}`);
+  return parts.join(" · ");
 }
 
 const KIND_OPTIONS = ACCOUNT_KINDS.map((k) => ({ value: k, label: ACCOUNT_KIND_LABEL[k] }));
@@ -76,7 +85,10 @@ export function AccountsSection({ accounts, openNew }: { accounts: Account[]; op
                     <span className={cn("rounded px-1.5 py-0.5 font-sans text-xs font-medium", KIND_BADGE[a.kind])}>
                       {ACCOUNT_KIND_LABEL[a.kind]}
                     </span>
-                    Inicial {money(a.start_balance, "USD")}
+                    Balance <Private className="font-semibold text-foreground">{money(a.balance, "USD")}</Private>
+                  </p>
+                  <p className="num mt-0.5 text-xs text-subtle">
+                    <Private>{balanceBreakdown(a)}</Private>
                   </p>
                 </div>
               </div>

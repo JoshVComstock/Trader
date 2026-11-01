@@ -5,6 +5,7 @@ import { money, signedMoney } from "@/lib/format";
 import { goalProgress, type GoalProgress } from "@/lib/rules";
 import { cn } from "@/lib/utils";
 import { useJournal } from "./journal-context";
+import { Private } from "@/components/app/private";
 
 /** Avance hacia el objetivo de hoy (con lo que ya registraste, también lo pendiente). */
 export function useGoalProgress(): GoalProgress | null {
@@ -25,11 +26,11 @@ export function GoalMeter({ progress, currency, open }: { progress: GoalProgress
           <TargetIcon className="size-3.5" />
           Objetivo del día
         </span>
-        <span className="num text-xs text-subtle">meta {money(progress.goal, currency)}</span>
+        <span className="num text-xs text-subtle">meta <Private>{money(progress.goal, currency)}</Private></span>
       </div>
       <p className={cn("num mt-1 text-2xl font-semibold tracking-tight", progress.net > 0 ? "text-gain" : progress.net < 0 ? "text-loss" : "")}>
-        {signedMoney(progress.net, currency)}
-        <span className="ml-1 text-sm font-normal text-subtle">de {money(progress.goal, currency)}</span>
+        <Private>{signedMoney(progress.net, currency)}</Private>
+        <span className="ml-1 text-sm font-normal text-subtle">de <Private>{money(progress.goal, currency)}</Private></span>
       </p>
       <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted" role="meter" aria-label="Objetivo del día" aria-valuenow={progress.net} aria-valuemin={0} aria-valuemax={progress.goal}>
         <div className={cn("h-full rounded-full transition-[width]", bar)} style={{ width: `${pct}%` }} />
@@ -48,7 +49,7 @@ export function GoalMeter({ progress, currency, open }: { progress: GoalProgress
       {open && progress.protectFloor !== null && !progress.gaveBack && (
         <p className="mt-1 flex items-center gap-1.5 text-xs text-gain">
           <ShieldCheckIcon className="size-3.5" />
-          Ganancia protegida: si bajas de {signedMoney(progress.protectFloor, currency)}, se para.
+          Ganancia protegida: si bajas de <Private>{signedMoney(progress.protectFloor, currency)}</Private>, se para.
         </p>
       )}
     </div>
@@ -66,8 +67,8 @@ export function GoalLine({ progress, currency }: { progress: GoalProgress; curre
           Objetivo
         </span>
         <span className="num font-semibold">
-          <span className={progress.net > 0 ? "text-gain" : progress.net < 0 ? "text-loss" : ""}>{signedMoney(progress.net, currency)}</span>
-          <span className="font-normal text-subtle"> / {money(progress.goal, currency)}</span>
+          <span className={progress.net > 0 ? "text-gain" : progress.net < 0 ? "text-loss" : ""}><Private>{signedMoney(progress.net, currency)}</Private></span>
+          <span className="font-normal text-subtle"> / <Private>{money(progress.goal, currency)}</Private></span>
         </span>
       </div>
       <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">

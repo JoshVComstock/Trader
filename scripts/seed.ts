@@ -5,18 +5,21 @@
  *   pnpm seed                       (usa SEED_EMAIL / SEED_PASSWORD de .env.local)
  *   pnpm seed -- --email yo@x.com   (siembra en un usuario existente)
  *
- * Borra y vuelve a crear solo las cuentas de ejemplo de ese usuario.
+ * Borra y vuelve a crear solo las cuentas de ejemplo de ese usuario. Escribe directo en
+ * Firestore (sin pasar por la app): después toca "Volver a leer mis datos" en Ajustes.
  */
-import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
-import { defaultPnl, deriveTrade } from "../lib/calc/trade";
+import { computeDayMetrics } from "../lib/calc/daily";
+import { defaultPnl, deriveTrade, round } from "../lib/calc/trade";
+import { adminAuth, db } from "../lib/db/admin";
+import { ensureUserProfile } from "../lib/db/bootstrap";
+import { refs, sessionId, type AccountDoc, type ObservationDoc, type SessionDoc, type TradeDoc } from "../lib/db/schema";
 import { defaultChecklist, type Checklist } from "../lib/domain/checklist";
 import { getInstrument, type InstrumentCode } from "../lib/domain/instruments";
 import type { Mood, Outcome } from "../lib/domain/types";
 import { evaluateTrade, type EngineTrade } from "../lib/rules";
-import { parseRules } from "../lib/schemas";
-import type { Database } from "../lib/supabase/database.types";
 import { addDays, fromLocal, localDate, weekdayMondayFirst } from "../lib/time-core";
+import { deleteAccountData, getProfileRules, writeAll, type Write } from "./firestore-utils";
 
 const REAL_LABEL = "Deriv real (ejemplo)";
 const BACKTEST_LABEL = "Backtesting (ejemplo)";
@@ -35,27 +38,15 @@ function rand(): number {
 const pick = <T,>(items: readonly T[]): T => items[Math.floor(rand() * items.length)];
 const chance = (p: number) => rand() < p;
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const secret = process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
-if (!url || !secret) {
-  console.error("Faltan NEXT_PUBLIC_SUPABASE_URL y SUPABASE_SECRET_KEY en .env.local");
-  process.exit(1);
-}
-const db = createClient<Database>(url, secret, { auth: { persistSession: false } });
-
 async function ensureUser(email: string, password: string | undefined): Promise<string> {
-  for (let page = 1; page < 50; page++) {
-    const { data, error } = await db.auth.admin.listUsers({ page, perPage: 200 });
-    if (error) throw error;
-    const found = data.users.find((u) => u.email?.toLowerCase() === email.toLowerCase());
-    if (found) return found.id;
-    if (data.users.length < 200) break;
+  try {
+    return (await adminAuth().getUserByEmail(email)).uid;
+  } catch {
+    if (!password) throw new Error(`No existe ${email} y no hay SEED_PASSWORD para crearlo`);
+    const user = await adminAuth().createUser({ email, password, emailVerified: true });
+    console.log(`Usuario creado: ${email}`);
+    return user.uid;
   }
-  if (!password) throw new Error(`No existe ${email} y no hay SEED_PASSWORD para crearlo`);
-  const { data, error } = await db.auth.admin.createUser({ email, password, email_confirm: true });
-  if (error) throw error;
-  console.log(`Usuario creado: ${email}`);
-  return data.user.id;
 }
 
 interface SeedTrade extends EngineTrade {
@@ -70,44 +61,25 @@ async function seedAccount(opts: {
   dates: string[];
   strategyId: string | null;
 }) {
-  const { userId } = opts;
-  const { data: account, error } = await db
-    .from("accounts")
-    .insert({ user_id: userId, label: opts.label, kind: opts.kind, start_balance: opts.startBalance, currency: "USD" })
-    .select("id")
-    .single();
-  if (error) throw error;
-
-  const { data: ruleRows } = await db.from("rules").select("type, params, action, enabled").eq("user_id", userId);
-  const rules = parseRules(ruleRows ?? []);
+  const r = refs(db(), opts.userId);
+  const accountId = randomUUID();
+  const rules = await getProfileRules(opts.userId);
+  const writes: Write[] = [];
 
   let balance = opts.startBalance;
   let trades = 0;
   let blocked = 0;
+  let lastTradeId: string | null = null;
 
   for (const date of opts.dates) {
     const moodBefore: Mood = pick(["tranquilo", "tranquilo", "tranquilo", "acelerado", "cansado"]);
     const startMinute = 8 * 60 + 20 + Math.floor(rand() * 110);
     const openedAt = fromLocal(date, `${String(Math.floor(startMinute / 60)).padStart(2, "0")}:${String(startMinute % 60).padStart(2, "0")}`);
-
-    const { data: session, error: sErr } = await db
-      .from("sessions")
-      .insert({
-        user_id: userId,
-        account_id: account.id,
-        date,
-        opened_at: openedAt.toISOString(),
-        mood_before: opts.kind === "real" ? moodBefore : null,
-        read_rules: opts.kind === "real" ? chance(0.8) : false,
-        goal_r: opts.kind === "real" ? 3 : null,
-        goal_amount: opts.kind === "real" ? 3 : null,
-      })
-      .select("id")
-      .single();
-    if (sErr) throw sErr;
+    const sid = sessionId(accountId, date);
 
     const planned = 1 + Math.floor(rand() * 3) + (moodBefore === "acelerado" && chance(0.5) ? 1 : 0);
     const sessionTrades: SeedTrade[] = [];
+    const tradeDocs: (TradeDoc & { id: string })[] = [];
     let cursor = openedAt.getTime() + (3 + rand() * 10) * 60_000;
     let blockReason: string | null = null;
     let lastLoss = false;
@@ -158,11 +130,11 @@ async function seedAccount(opts: {
         goalAmount: opts.kind === "real" ? 3 : null,
       });
 
-      const { error: tErr } = await db.from("trades").insert({
+      tradeDocs.push({
         id: candidate.id,
-        user_id: userId,
-        session_id: session.id,
-        account_id: account.id,
+        session_id: sid,
+        session_date: date,
+        account_id: accountId,
         strategy_id: opts.strategyId,
         instrument,
         direction,
@@ -174,6 +146,8 @@ async function seedAccount(opts: {
         mood,
         checklist,
         anxiety: accelerated ? 4 + Math.floor(rand() * 2) : 1 + Math.floor(rand() * 3),
+        entry_amount: null,
+        multiplier: null,
         note: chance(0.25)
           ? pick([
               "Spike limpio en la zona de 1H, reacción inmediata.",
@@ -183,27 +157,23 @@ async function seedAccount(opts: {
               "Salida en TP sin tocar nada. Así es.",
             ])
           : null,
+        created_at: candidate.opened_at,
+        violations: evaluation.violations.map((v) => ({
+          id: randomUUID(),
+          rule_type: v.ruleType,
+          message: v.message,
+          created_at: candidate.opened_at,
+        })),
+        attachments: [],
         ...deriveTrade({ instrument, direction, stake, pnl, checklist }),
       });
-      if (tErr) throw tErr;
-
-      if (evaluation.violations.length) {
-        await db.from("rule_violations").insert(
-          evaluation.violations.map((v) => ({
-            user_id: userId,
-            trade_id: candidate.id,
-            session_id: session.id,
-            rule_type: v.ruleType,
-            message: v.message,
-          })),
-        );
-      }
 
       sessionTrades.push(candidate);
       balance += pnl;
       trades++;
       lastLoss = pnl < 0;
       lastStake = stake;
+      lastTradeId = candidate.id;
 
       if (evaluation.shouldBlock) {
         blockReason =
@@ -215,26 +185,50 @@ async function seedAccount(opts: {
     }
 
     const followed = !sessionTrades.some((t) => t.impulse) && chance(0.85);
-    await db
-      .from("sessions")
-      .update({
-        // En backtesting los días quedan abiertos para seguir cargando operaciones.
-        status: blockReason ? "blocked" : opts.kind === "backtest" ? "open" : "closed",
-        blocked_reason: blockReason,
-        closed_at: new Date(cursor + 2 * 60_000).toISOString(),
-        followed_plan: opts.kind === "real" ? followed : null,
-        journal:
-          opts.kind === "real" && chance(0.4)
-            ? followed
-              ? "Esperé las zonas y respeté el SL. Día tranquilo."
-              : "Me aceleré después de la primera pérdida. Mañana, pausa de 5 minutos."
-            : null,
-      })
-      .eq("id", session.id);
+    const session: SessionDoc = {
+      account_id: accountId,
+      date,
+      opened_at: openedAt.toISOString(),
+      mood_before: opts.kind === "real" ? moodBefore : null,
+      read_rules: opts.kind === "real" ? chance(0.8) : false,
+      goal_r: opts.kind === "real" ? 3 : null,
+      goal_amount: opts.kind === "real" ? 3 : null,
+      planned_minutes: null,
+      created_at: openedAt.toISOString(),
+      // En backtesting los días quedan abiertos para seguir cargando operaciones.
+      status: blockReason ? "blocked" : opts.kind === "backtest" ? "open" : "closed",
+      blocked_reason: blockReason,
+      closed_at: new Date(cursor + 2 * 60_000).toISOString(),
+      followed_plan: opts.kind === "real" ? followed : null,
+      journal:
+        opts.kind === "real" && chance(0.4)
+          ? followed
+            ? "Esperé las zonas y respeté el SL. Día tranquilo."
+            : "Me aceleré después de la primera pérdida. Mañana, pausa de 5 minutos."
+          : null,
+      metrics: computeDayMetrics(tradeDocs.map((t) => ({ ...t, violated: t.violations.length > 0 }))),
+    };
+    writes.push({ ref: r.sessions.doc(sid), data: session });
+    for (const { id, ...t } of tradeDocs) writes.push({ ref: r.trades.doc(id), data: t });
     if (blockReason) blocked++;
   }
 
-  return { trades, sessions: opts.dates.length, blocked, balance };
+  const account: AccountDoc = {
+    label: opts.label,
+    kind: opts.kind,
+    currency: "USD",
+    start_balance: opts.startBalance,
+    broker: "deriv",
+    created_at: new Date().toISOString(),
+    pnl_total: round(balance - opts.startBalance, 2),
+    deposits_total: 0,
+    withdrawals_total: 0,
+    last_trade_id: lastTradeId,
+  };
+  writes.unshift({ ref: r.accounts.doc(accountId), data: account });
+  await writeAll(writes);
+
+  return { accountId, trades, sessions: opts.dates.length, blocked, balance };
 }
 
 function pastWeekdays(count: number, today: string, skipChance: number): string[] {
@@ -253,52 +247,54 @@ async function main() {
   if (!email) throw new Error("Indica --email o SEED_EMAIL");
 
   const userId = await ensureUser(email, password);
+  await ensureUserProfile(userId, email);
+  const r = refs(db(), userId);
 
-  await db.from("accounts").delete().eq("user_id", userId).in("label", [REAL_LABEL, BACKTEST_LABEL]);
+  for (const label of [REAL_LABEL, BACKTEST_LABEL]) {
+    const old = await r.accounts.where("label", "==", label).get();
+    for (const a of old.docs) await deleteAccountData(userId, a.id);
+  }
 
-  const { data: strategy } = await db
-    .from("strategies")
-    .select("id")
-    .eq("user_id", userId)
-    .order("created_at")
-    .limit(1)
-    .maybeSingle();
+  const strategies = await r.strategies.get();
+  const strategy = strategies.docs.sort((a, b) => String(a.get("created_at")).localeCompare(String(b.get("created_at"))))[0];
 
   const today = localDate(new Date());
   // 30 días hábiles en ~2 meses (se saltan algunos).
-  const realDates = pastWeekdays(30, today, 0.28);
   const real = await seedAccount({
     userId,
     label: REAL_LABEL,
     kind: "real",
     startBalance: 250,
-    dates: realDates,
+    dates: pastWeekdays(30, today, 0.28),
     strategyId: strategy?.id ?? null,
   });
 
-  const backtestDates = pastWeekdays(10, addDays(today, -120), 0.2);
   const backtest = await seedAccount({
     userId,
     label: BACKTEST_LABEL,
     kind: "backtest",
     startBalance: 500,
-    dates: backtestDates,
+    dates: pastWeekdays(10, addDays(today, -120), 0.2),
     strategyId: strategy?.id ?? null,
   });
 
-  await db.from("observations").delete().eq("user_id", userId);
-  const { data: bt } = await db.from("accounts").select("id").eq("user_id", userId).eq("label", BACKTEST_LABEL).single();
-  await db.from("observations").insert([
-    { user_id: userId, account_id: bt?.id ?? null, instrument: "BOOM1000", kind: "zona", level: 12850.5, timeframe: "1H", note: "Soporte que reaccionó tres veces con spike inmediato.", times_seen: 3 },
-    { user_id: userId, account_id: bt?.id ?? null, instrument: "CRASH500", kind: "patron", timeframe: "1M", note: "Después de dos spikes seguidos, el tercero casi nunca llega a la zona.", times_seen: 2 },
-    { user_id: userId, account_id: bt?.id ?? null, instrument: "BOOM500", kind: "zona", level: 4321.25, timeframe: "1H", note: "Resistencia: los spikes se frenan aquí.", times_seen: 1 },
-  ]);
+  const old = await r.observations.get();
+  const now = new Date().toISOString();
+  const observations: ObservationDoc[] = [
+    { account_id: backtest.accountId, instrument: "BOOM1000", kind: "zona", level: 12850.5, timeframe: "1H", note: "Soporte que reaccionó tres veces con spike inmediato.", times_seen: 3, last_seen_at: now, created_at: now },
+    { account_id: backtest.accountId, instrument: "CRASH500", kind: "patron", level: null, timeframe: "1M", note: "Después de dos spikes seguidos, el tercero casi nunca llega a la zona.", times_seen: 2, last_seen_at: now, created_at: now },
+    { account_id: backtest.accountId, instrument: "BOOM500", kind: "zona", level: 4321.25, timeframe: "1H", note: "Resistencia: los spikes se frenan aquí.", times_seen: 1, last_seen_at: now, created_at: now },
+  ];
+  const batch = db().batch();
+  for (const d of old.docs) batch.delete(d.ref);
+  for (const o of observations) batch.set(r.observations.doc(randomUUID()), o);
+  await batch.commit();
 
   console.log(
     `Real: ${real.sessions} sesiones, ${real.trades} operaciones, ${real.blocked} bloqueadas, balance final $${real.balance.toFixed(2)}`,
   );
   console.log(`Backtesting: ${backtest.sessions} sesiones, ${backtest.trades} operaciones, ${backtest.blocked} bloqueadas`);
-  console.log(`Listo. Entra con ${email}.`);
+  console.log(`Listo. Entra con ${email} y en Ajustes toca "Volver a leer mis datos".`);
 }
 
 main().catch((e: unknown) => {

@@ -2,6 +2,7 @@ import { cn } from "@/lib/utils";
 import { Panel } from "@/components/app/layout";
 import type { Bucket } from "@/lib/calc/metrics";
 import { compactMoney, percent, rValue } from "@/lib/format";
+import { Private } from "@/components/app/private";
 
 function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
@@ -74,7 +75,7 @@ export function SpikeCard({ withSpike, against }: { withSpike: Bucket; against: 
                 />
               </div>
               <p className="num mt-1 text-xs text-subtle">
-                {b.trades} op · {percent(b.winRate)} win rate · {compactMoney(b.pnl)} · {hint}
+                {b.trades} op · {percent(b.winRate)} win rate · <Private>{compactMoney(b.pnl)}</Private> · {hint}
               </p>
             </li>
           ))}
@@ -105,7 +106,7 @@ export function ByHourCard({ buckets }: { buckets: Bucket[] }) {
                     style={b.pnl >= 0 ? { left: "50%", width: `${w}%` } : { right: "50%", width: `${w}%` }}
                   />
                 </div>
-                <span className={cn("num text-right", signTone(b.pnl))}>{compactMoney(b.pnl)}</span>
+                <span className={cn("num text-right", signTone(b.pnl))}><Private>{compactMoney(b.pnl)}</Private></span>
               </li>
             );
           })}

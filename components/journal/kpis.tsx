@@ -3,6 +3,7 @@ import type { Kpis } from "@/lib/calc/metrics";
 import { decimal, money, percent, rValue, signedMoney } from "@/lib/format";
 import type { Streak } from "@/lib/psych";
 import { RHelp } from "./r-help";
+import { Private } from "@/components/app/private";
 
 function tone(value: number | null) {
   if (value === null || value === 0) return "text-foreground";
@@ -31,11 +32,21 @@ export function KpiRow({
   /** Stop promedio del mes, para traducir la esperanza en R a dólares. */
   avgStake?: number | null;
 }) {
-  const items = [
+  const items: {
+    label: string;
+    value: string;
+    className: string;
+    sub: string;
+    help?: boolean;
+    /** Monto: se tapa en modo privado. */
+    secret?: boolean;
+    secretSub?: boolean;
+  }[] = [
     {
       label: "Neto del mes",
       value: kpis.trades ? signedMoney(kpis.net, currency) : "—",
       className: tone(kpis.trades ? kpis.net : null),
+      secret: true,
       sub: `${kpis.trades} ${kpis.trades === 1 ? "operación" : "operaciones"}`,
     },
     {
@@ -49,6 +60,7 @@ export function KpiRow({
       value: decimal(kpis.profitFactor),
       className: "text-foreground",
       sub: `${money(grossProfit, currency)} / ${money(grossLoss, currency)}`,
+      secretSub: true,
     },
     {
       label: "Esperanza",
@@ -59,6 +71,7 @@ export function KpiRow({
         kpis.expectancyR !== null && avgStake
           ? `≈ ${signedMoney(kpis.expectancyR * avgStake, currency)} por operación`
           : "por operación",
+      secretSub: Boolean(kpis.expectancyR !== null && avgStake),
     },
   ];
 
@@ -85,10 +98,12 @@ export function KpiRow({
         <div key={it.label} className="bg-card px-4 py-5 sm:px-6">
           <p className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
             {it.label}
-            {"help" in it && it.help && <RHelp label="¿R?" />}
+            {it.help && <RHelp label="¿R?" />}
           </p>
-          <p className={cn("num mt-2 text-3xl font-semibold tracking-tight sm:text-4xl", it.className)}>{it.value}</p>
-          <p className="num mt-1.5 truncate text-sm text-subtle">{it.sub}</p>
+          <p className={cn("num mt-2 text-3xl font-semibold tracking-tight sm:text-4xl", it.className)}>
+            {it.secret ? <Private>{it.value}</Private> : it.value}
+          </p>
+          <p className="num mt-1.5 truncate text-sm text-subtle">{it.secretSub ? <Private>{it.sub}</Private> : it.sub}</p>
         </div>
       ))}
     </section>

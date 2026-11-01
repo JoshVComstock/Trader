@@ -1,85 +1,91 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { fail, ok, zodFieldErrors, type ActionResult } from "@/lib/action-result";
-import { requireUser, todayLocal } from "@/lib/data";
+import { requireUser } from "@/lib/auth";
+import { db } from "@/lib/db/admin";
+import { invalidate } from "@/lib/db/invalidate";
+import { refs, sessionId, type SessionDoc } from "@/lib/db/schema";
+import { todayLocal } from "@/lib/data";
 import { checkinSchema, closeSessionSchema } from "@/lib/schemas";
 
-function revalidateJournal() {
-  revalidatePath("/journal", "layout");
-  revalidatePath("/backtesting", "layout");
-}
-
-/** Check-in emocional: abre la sesión de hoy para una cuenta. */
+/** Check-in emocional: abre la sesión de hoy para una cuenta. Si ya existe, no la toca. */
 export async function checkIn(raw: unknown): Promise<ActionResult<{ sessionId: string }>> {
   const parsed = checkinSchema.safeParse(raw);
   if (!parsed.success) return fail("Revisa el check-in", "validation", zodFieldErrors(parsed.error.issues));
   const input = parsed.data;
-  const { supabase, user } = await requireUser();
+  const { uid } = await requireUser();
+  const r = refs(db(), uid);
 
-  const { data: account } = await supabase.from("accounts").select("id, kind").eq("id", input.account_id).maybeSingle();
-  if (!account) return fail("No encontramos esa cuenta", "not_found");
+  const account = await r.accounts.doc(input.account_id).get();
+  if (!account.exists) return fail("No encontramos esa cuenta", "not_found");
 
   const date = todayLocal();
-  const { data: existing } = await supabase
-    .from("sessions")
-    .select("id")
-    .eq("account_id", account.id)
-    .eq("date", date)
-    .maybeSingle();
-  if (existing) return ok({ sessionId: existing.id });
+  const id = sessionId(account.id, date);
+  const now = new Date().toISOString();
+  const session: SessionDoc = {
+    account_id: account.id,
+    date,
+    opened_at: now,
+    closed_at: null,
+    mood_before: input.mood_before,
+    read_rules: input.read_rules,
+    goal_r: input.goal_r,
+    followed_plan: null,
+    journal: null,
+    status: "open",
+    blocked_reason: null,
+    planned_minutes: input.planned_minutes,
+    goal_amount: input.goal_amount,
+    created_at: now,
+    metrics: null,
+  };
+  try {
+    // `create` falla si ya existe: dos check-ins el mismo día no pisan la sesión.
+    await r.sessions.doc(id).create(session);
+  } catch (e) {
+    if ((e as { code?: number }).code !== 6) {
+      console.error("[checkIn]", e);
+      return fail("No pudimos abrir la sesión", "unknown");
+    }
+  }
 
-  const { data, error } = await supabase
-    .from("sessions")
-    .insert({
-      user_id: user.id,
-      account_id: account.id,
-      date,
-      mood_before: input.mood_before,
-      read_rules: input.read_rules,
-      goal_r: input.goal_r,
-      goal_amount: input.goal_amount,
-      planned_minutes: input.planned_minutes,
-    })
-    .select("id")
-    .single();
-  if (error) return fail("No pudimos abrir la sesión", "unknown");
-
-  revalidateJournal();
-  return ok({ sessionId: data.id });
+  invalidate.ledger(uid, account.id, { balance: false });
+  return ok({ sessionId: id });
 }
 
-/** Cierre de sesión con reflexión. Es definitivo hasta mañana. Una bloqueada guarda la reflexión y sigue bloqueada. */
+/**
+ * Cierre de sesión con reflexión. En vivo es definitivo hasta mañana (registrar en una sesión
+ * cerrada se rechaza en la transacción). Una bloqueada guarda la reflexión y sigue bloqueada.
+ */
 export async function closeSession(raw: unknown): Promise<ActionResult> {
   const parsed = closeSessionSchema.safeParse(raw);
   if (!parsed.success) return fail("Revisa el cierre", "validation", zodFieldErrors(parsed.error.issues));
   const input = parsed.data;
-  const { supabase } = await requireUser();
+  const { uid } = await requireUser();
+  const r = refs(db(), uid);
+  const ref = r.sessions.doc(input.session_id);
 
-  const { data: session } = await supabase
-    .from("sessions")
-    .select("id, status, closed_at")
-    .eq("id", input.session_id)
-    .maybeSingle();
-  if (!session) return fail("No encontramos la sesión", "not_found");
-
-  const { error } = await supabase
-    .from("sessions")
-    .update({
-      followed_plan: input.followed_plan,
-      journal: input.journal || null,
-      status: session.status === "blocked" ? "blocked" : "closed",
-      closed_at: session.closed_at ?? new Date().toISOString(),
+  const accountId = await db()
+    .runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) return null;
+      const s = snap.data() as SessionDoc;
+      tx.update(ref, {
+        followed_plan: input.followed_plan,
+        journal: input.journal || null,
+        status: s.status === "blocked" ? "blocked" : "closed",
+        closed_at: s.closed_at ?? new Date().toISOString(),
+      });
+      return s.account_id;
     })
-    .eq("id", session.id);
-  if (error) return fail("No pudimos cerrar la sesión", "unknown");
+    .catch((e: unknown) => {
+      console.error("[closeSession]", e);
+      return undefined;
+    });
+  if (accountId === undefined) return fail("No pudimos cerrar la sesión", "unknown");
+  if (accountId === null) return fail("No encontramos la sesión", "not_found");
 
-  revalidateJournal();
+  invalidate.ledger(uid, accountId, { balance: false });
   return ok(undefined);
 }
 
-/** Reabre una sesión cerrada a mano. Una bloqueada no se reabre: la base lo impide. */
-/**
- * Una sesión cerrada en vivo no se reabre: se vuelve a operar mañana. La base lo impide también
- * (trigger `sessions_guard`), así que no se puede saltar llamando a la API directo.
- */

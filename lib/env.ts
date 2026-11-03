@@ -36,7 +36,7 @@ export function firebaseAdminEnv() {
     projectId,
     clientEmail: required("FIREBASE_CLIENT_EMAIL", process.env.FIREBASE_CLIENT_EMAIL),
     // En .env la clave viene en una línea con "\n" escritos: se vuelven saltos reales.
-    privateKey: required("FIREBASE_PRIVATE_KEY", process.env.FIREBASE_PRIVATE_KEY).replace(/\n/g, "\n"),
+    privateKey: required("FIREBASE_PRIVATE_KEY", process.env.FIREBASE_PRIVATE_KEY).replace(/\\n/g, "\n"),
   };
 }
 
